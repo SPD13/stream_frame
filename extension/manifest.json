@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Stream Frame Helper",
+  "version": "1.0.0",
+  "description": "Start page, Home button and controller mapping for Stream Frame on the Steam Frame.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1EqUisbXg2ejUTBSWYzddBkwUHfq1E5KvCQCBWAN2MH1UCXRJC0rCEHTM+GFojde3AMLG0CDdgf5AjgibgQYnzwaOcikdjIFUI7AMOyzfUZxlEA06LLblwJfmaZb6LxCw5QkpVctLEJCg4P8YoP2LgGyILxON4onCkIZJmwGQSRDueAlgMoOfpyIpjazYyClKOdNqXWa97F2/yeyzSd22L1N6VbiuBbVPLTwtr06NPf/6gBGm/l3vHoLWzhwPeymNHyF8QKupxALS/7AFSpQ3OmYmh5G4VAWpLoDUmp+Z5QqV1XOfBgcMAnwIUQ1iLCnyv4DHi50QNS5Hc1ijG9mkQIDAQAB",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage"],
+  "icons": { "128": "icons/icon128.png" },
+  "chrome_url_overrides": { "newtab": "home.html" },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["settings.js", "input.js", "actions.js", "content.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://www.netflix.com/*"],
+      "js": ["bridge-netflix.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["home.html", "probe.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

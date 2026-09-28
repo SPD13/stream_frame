@@ -1,0 +1,64 @@
+<!doctype html>
+<!-- Chrome starts here (file://…/boot.html#<extension-id>). If the Stream Frame Helper
+     extension is installed, redirect to its start page; otherwise explain how to fix it. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stream Frame</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      background: #0b0c10; color: #f2f3f5;
+      font: 18px/1.5 system-ui, 'Segoe UI', Roboto, 'DejaVu Sans', sans-serif;
+    }
+    .card { max-width: 760px; padding: 36px 40px; border-radius: 20px; background: #1b1e26; display: none; }
+    .card.show { display: block; }
+    h1 { margin: 0 0 12px; font-size: 28px; }
+    ol { padding-left: 1.3em; }
+    code { background: #0b0c10; padding: 2px 7px; border-radius: 6px; user-select: all; }
+    button {
+      margin-top: 12px; min-height: 52px; padding: 12px 22px; border: 0; border-radius: 12px;
+      background: #1a9fff; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+    }
+    .muted { color: #9aa0ad; }
+  </style>
+</head>
+<body>
+  <div class="card" id="missing">
+    <h1>Stream Frame Helper is not installed</h1>
+    <p>The start page lives in the helper extension, which Chrome has not loaded in this profile.</p>
+    <ol>
+      <li>Over SSH, re-run <code>~/.local/share/stream-frame/install.sh</code> (or the copy you installed from), then relaunch Stream Frame.</li>
+      <li>If Chrome shows a “New extension added” notice, choose <strong>Enable extension</strong>.</li>
+      <li>Still missing? Open <code>chrome://extensions</code>, turn on <em>Developer mode</em>, click <em>Load unpacked</em> and pick
+        <code id="unpacked">~/.local/share/stream-frame/extension</code>.</li>
+    </ol>
+    <button id="retry" type="button">Try the start page anyway</button>
+    <p class="muted" id="details"></p>
+  </div>
+  <script>
+    (function () {
+      var id = (location.hash || '').slice(1).replace(/[^a-p]/g, '');
+      var home = 'chrome-extension://' + id + '/home.html';
+      var shown = false;
+      function missing(why) {
+        if (shown) return;
+        shown = true;
+        document.getElementById('missing').className = 'card show';
+        document.getElementById('details').textContent = 'Extension id: ' + (id || '(none passed)') + (why ? ' · ' + why : '');
+        var p = location.pathname.replace(/\/web\/boot\.html$/, '/extension');
+        if (p !== location.pathname) document.getElementById('unpacked').textContent = decodeURIComponent(p);
+      }
+      document.getElementById('retry').onclick = function () { location.replace(home); };
+      if (id.length !== 32) return missing('launcher did not pass an extension id');
+      var probe = new Image();
+      probe.onload = function () { shown = true; location.replace(home); };
+      probe.onerror = function () { missing('probe image did not load'); };
+      probe.src = 'chrome-extension://' + id + '/probe.png';
+      setTimeout(function () { missing('timed out'); }, 4000);
+    })();
+  </script>
+</body>
+</html>

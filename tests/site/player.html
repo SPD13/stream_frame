@@ -1,0 +1,28 @@
+<!doctype html>
+<title>Player test</title>
+<body style="background:#222;color:#eee;font-family:sans-serif">
+<h1>Fake streaming site</h1>
+<input id="search" placeholder="search">
+<div id="player" style="width:960px;height:540px;background:#000"><video id="v" style="width:100%;height:100%" muted playsinline></video></div>
+<p id="status">recording…</p>
+<script>
+window.siteKeys = [];
+document.addEventListener('keydown', e => siteKeys.push(e.code));
+(async () => {
+  const c = document.createElement('canvas'); c.width = 320; c.height = 180;
+  const ctx = c.getContext('2d');
+  const rec = new MediaRecorder(c.captureStream(30), { mimeType: 'video/webm' });
+  const chunks = []; rec.ondataavailable = e => chunks.push(e.data);
+  let f = 0; const t0 = performance.now();
+  const iv = setInterval(() => { ctx.fillStyle = `hsl(${f*7%360} 60% 40%)`; ctx.fillRect(0,0,320,180); ctx.fillStyle='#fff'; ctx.font='40px sans-serif'; ctx.fillText(((performance.now()-t0)/1000).toFixed(1)+'s', 90, 100); f++; }, 33);
+  rec.start(); await new Promise(r => setTimeout(r, 14000)); rec.stop(); clearInterval(iv);
+  await new Promise(r => rec.onstop = r);
+  const v = document.getElementById('v');
+  v.src = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
+  await new Promise(r => v.onloadedmetadata = r);
+  if (!isFinite(v.duration)) { v.currentTime = 1e6; await new Promise(r => v.ondurationchange = r); v.currentTime = 0; }
+  await v.play();
+  document.getElementById('status').textContent = 'ready';
+  window.ready = true;
+})();
+</script>

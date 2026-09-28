@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Stream Frame launcher. Steam runs this from the library shortcut; it starts Google
+# Chrome full screen on the Stream Frame start page, in a dedicated persistent
+# profile, on gamescope's X display so SteamVR shows it as its own panel.
+#
+#   stream-frame                   launch
+#   stream-frame --print-command   print the Chrome command line instead of running it
+#
+# Settings: ~/.config/stream-frame/config.env (see config.env.example).
+# Log: ~/.local/state/stream-frame/launcher.log
+set -uo pipefail
+
+SF_DATA=${SF_DATA:-$HOME/.local/share/stream-frame}
+SF_CONFIG=${SF_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/stream-frame/config.env}
+SF_STATE=${XDG_STATE_HOME:-$HOME/.local/state}/stream-frame
+here=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
+lib=$here/../lib
+[[ -d $lib ]] || lib=$SF_DATA/lib
+
+print_only=0
+[[ ${1:-} == --print-command ]] && print_only=1
+
+# ---- defaults, overridable in config.env ----
+CHROME_BACKEND=auto          # auto | flatpak | deb
+WINDOW_SIZE=1280,720         # matches gamescope's default nested size; see docs/spikes/S3.md
+SCALE_FACTOR=                # e.g. 1.25 for larger UI if the panel is stuck at 720p
+START_URL=                   # empty: the Stream Frame start page
+UA_EXPERIMENT=0              # 1: ChromeOS user agent (ToS grey area, off by default)
+UA_STRING='Mozilla/5.0 (X11; CrOS aarch64 16433.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
+TAG_WINDOW=auto              # auto: set STEAM_GAME on the Chrome window if gamescope did not; 0: never
+EXTRA_FLAGS=                 # extra Chrome flags, space separated
+# shellcheck source=/dev/null
+[[ -f $SF_CONFIG ]] && . "$SF_CONFIG"
+export CHROME_BACKEND
+
+if (( ! print_only )); then
+  mkdir -p "$SF_STATE"
+  exec >>"$SF_STATE/launcher.log" 2>&1
+  echo "=== $(date '+%Y-%m-%dT%H:%M:%S%z') stream-frame launch (SteamGameId=${SteamGameId:-unset})"
+fi
+
+fail() {
+  echo "stream-frame: $*" >&2
+  if command -v kdialog >/dev/null 2>&1; then kdialog --title "Stream Frame" --error "$*" &
+  elif command -v zenity >/dev/null 2>&1; then zenity --error --title="Stream Frame" --text="$*" &
+  fi
+  sleep 1
+  exit 1
+}
+
+# 1. Steam preloads its overlay into everything it launches; it crashes Chrome's zygote.
+if [[ -n ${LD_PRELOAD:-} ]]; then
+  read -ra preload <<<"${LD_PRELOAD//:/ }"
+  kept=()
+  for p in "${preload[@]}"; do
+    [[ $p == *gameoverlayrenderer.so* ]] || kept+=("$p")
+  done
+  if (( ${#kept[@]} )); then export LD_PRELOAD="${kept[*]}"; else unset LD_PRELOAD; fi
+fi
+echo "LD_PRELOAD after strip: ${LD_PRELOAD-<unset>}"
+
+# 2. Chrome backend
+# shellcheck source=lib/chrome-backend.sh
+. "$lib/chrome-backend.sh"
+sf_chrome_cmd || fail "Google Chrome is not installed. Re-run install.sh over SSH."
+
+# 3. Start page
+ext_id=$(cat "$SF_DATA/extension-id" 2>/dev/null || true)
+start=${START_URL:-file://$SF_DATA/web/boot.html#$ext_id}
+
+export DISPLAY=${DISPLAY:-:0}
+
+profile=$SF_DATA/profile
+# shellcheck disable=SC2054  # commas are part of flag values
+flags=(
+  --ozone-platform=x11
+  --user-data-dir="$profile"
+  --class=stream-frame
+  --no-first-run
+  --no-default-browser-check
+  --password-store=basic
+  --start-fullscreen
+  --window-position=0,0
+  --window-size="$WINDOW_SIZE"
+  --force-dark-mode
+  --autoplay-policy=no-user-gesture-required
+  --hide-crash-restore-bubble
+  --disable-features=Translate,MediaRouter
+)
+[[ -n $SCALE_FACTOR ]] && flags+=(--force-device-scale-factor="$SCALE_FACTOR")
+[[ $UA_EXPERIMENT == 1 ]] && flags+=(--user-agent="$UA_STRING")
+# shellcheck disable=SC2206  # EXTRA_FLAGS is intentionally word-split
+[[ -n $EXTRA_FLAGS ]] && flags+=($EXTRA_FLAGS)
+
+if (( print_only )); then
+  printf '%q ' "${SF_CHROME_CMD[@]}" "${flags[@]}" "$start"
+  echo
+  exit 0
+fi
+
+if pgrep -f -- "--user-data-dir=$profile" >/dev/null 2>&1; then
+  echo "warning: Chrome is already running on the Stream Frame profile; the new launch will join it"
+fi
+
+# 4. Panel identity: make sure gamescope can map the window to this shortcut's panel.
+if [[ $TAG_WINDOW != 0 && -n ${SteamGameId:-} ]]; then
+  "$lib/tag-window.sh" "$SteamGameId" &
+fi
+
+echo "exec: ${SF_CHROME_CMD[*]} ${flags[*]} $start"
+exec "${SF_CHROME_CMD[@]}" "${flags[@]}" "$start"

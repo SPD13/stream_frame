@@ -1,0 +1,9 @@
+[
+  { "id": "netflix",    "name": "Netflix",     "url": "https://www.netflix.com/browse",  "color": "#000000", "logo": "logos/netflix.png",    "logoFit": "cover" },
+  { "id": "max",        "name": "HBO Max",     "url": "https://www.max.com/",            "color": "#090E18", "logo": "logos/max.png",        "logoFit": "cover" },
+  { "id": "hulu",       "name": "Hulu",        "url": "https://www.hulu.com/hub/home",   "color": "#000000", "logo": "logos/hulu.png",       "logoFit": "cover" },
+  { "id": "disneyplus", "name": "Disney+",     "url": "https://www.disneyplus.com/home", "color": "#0063E5", "logo": "logos/disneyplus.png", "logoFit": "cover" },
+  { "id": "appletv",    "name": "Apple TV+",   "url": "https://tv.apple.com/",           "color": "#000000", "logo": "logos/appletv.png",    "logoFit": "cover" },
+  { "id": "primevideo", "name": "Prime Video", "url": "https://www.primevideo.com/",     "color": "#0578FF", "logo": "logos/primevideo.png", "logoFit": "cover" },
+  { "id": "youtube",    "name": "YouTube",     "url": "https://www.youtube.com/",        "color": "#FFFFFF", "logo": "logos/youtube.png",    "logoFit": "cover" }
+]
