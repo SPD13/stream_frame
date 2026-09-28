@@ -13,6 +13,11 @@ spike [S1](spikes/S1.md) replaces them with measurements.
 | Apple TV+ | 480p to 720p | | |
 | Prime Video | 480p to 540p | | |
 | YouTube | full resolution (no DRM) | | movies / YouTube TV use Widevine L3 |
+| Crunchyroll | unconfirmed | | |
+| Paramount+ | unconfirmed | | |
+| Peacock | unconfirmed | | |
+| Tubi | unconfirmed | | free, ad-supported |
+| Pluto TV | unconfirmed | | free, ad-supported |
 
 4K and HDR are not possible on any DRM service in Linux Chrome.
 

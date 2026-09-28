@@ -1,7 +1,7 @@
 # Stream Frame
 
-Watch Netflix, HBO Max, Hulu, Disney+, Apple TV+, Prime Video and YouTube standalone on the
-**Valve Steam Frame**, on a cinema-sized SteamVR panel, in the dark home space or over colour
+Watch Netflix, HBO Max, Hulu, Disney+, Apple TV+, Prime Video, YouTube, Crunchyroll, Paramount+,
+Peacock, Tubi and Pluto TV standalone on the **Valve Steam Frame**, on a cinema-sized SteamVR panel, in the dark home space or over colour
 passthrough.
 
 Stream Frame is a launcher, not a player. It installs Google Chrome for ARM64 Linux (the only
@@ -34,6 +34,11 @@ browser-based solution on the Frame:
 | Apple TV+ | 480p to 720p |
 | Prime Video | 480p to 540p |
 | YouTube | full resolution (no DRM on normal videos) |
+| Crunchyroll | plays; cap unconfirmed |
+| Paramount+ | plays; cap unconfirmed |
+| Peacock | plays; cap unconfirmed |
+| Tubi | plays; cap unconfirmed |
+| Pluto TV | plays; cap unconfirmed |
 
 No 4K, no HDR. The SteamVR panel is 1280×720 by default, so anything above 720p is downscaled
 unless spike S3 finds a way to raise it. Measured results will land in
@@ -279,7 +284,8 @@ search box is never hijacked.
 The gear icon on the start page opens **Configuration**:
 
 - **Tiles:** reorder (drag rows, or ▲ ▼), show or hide, add a tile for any site (name, URL,
-  optional logo URL), edit or remove your own tiles, reset to the default seven.
+  optional logo URL), edit or remove your own tiles, reset to the defaults. Crunchyroll, Peacock,
+  Tubi and Pluto TV are hidden by default; tick them here to add them to the start page.
 - **Controls:** click **+ Assign** and press a controller button or key to map it (up to four per
   action; assigning a button moves it from any other action). The *Receiving* strip shows what
   the page receives and whether the controller is in gamepad or keyboard mode. Also: seek step
@@ -395,8 +401,8 @@ Steam library shortcut "Stream Frame"
 
 ## Logos and trademarks
 
-Netflix, HBO Max, Hulu, Disney+, Apple TV+, Prime Video and YouTube are trademarks of their
-owners; Stream Frame is not affiliated with them or with Valve.
+Netflix, HBO Max, Hulu, Disney+, Apple TV+, Prime Video, YouTube, Crunchyroll, Paramount+, Peacock,
+Tubi and Pluto TV are trademarks of their owners; Stream Frame is not affiliated with them or with Valve.
 
 The built-in tiles in `extension/logos/*.png` are rendered from the icons in `assets/raw_icons/`.
 Tiles you add yourself use the logo URL you give; without one, the start page uses the site's own

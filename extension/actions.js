@@ -27,6 +27,11 @@
     // Prime Video keeps preview/trailer videos in the DOM; pickVideo prefers the playing one.
     { id: 'primevideo', host: /(^|\.)(primevideo\.com|amazon\.[a-z.]+)$/, keys: { fullscreen: { key: 'f', code: 'KeyF' } } },
     { id: 'youtube', host: /(^|\.)youtube\.com$/, keys: { fullscreen: { key: 'f', code: 'KeyF' } } },
+    { id: 'crunchyroll', host: /(^|\.)crunchyroll\.com$/, keys: { fullscreen: { key: 'f', code: 'KeyF' } } },
+    { id: 'paramountplus', host: /(^|\.)paramountplus\.com$/, keys: { fullscreen: { key: 'f', code: 'KeyF' } } },
+    { id: 'peacock', host: /(^|\.)peacocktv\.com$/, keys: { fullscreen: { key: 'f', code: 'KeyF' } } },
+    { id: 'tubi', host: /(^|\.)tubitv\.com$/, keys: { fullscreen: { key: 'f', code: 'KeyF' } } },
+    { id: 'plutotv', host: /(^|\.)pluto\.tv$/, keys: { fullscreen: { key: 'f', code: 'KeyF' } } },
   ];
 
   SF.currentQuirk = function () {

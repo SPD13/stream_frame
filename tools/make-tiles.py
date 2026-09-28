@@ -5,7 +5,7 @@ twice the on-panel tile size).
 
 Each tile is full bleed: the canvas is filled with the icon's own background colour
 and the icon is centred on it, so the icon's edges disappear into the tile.
-Needs Pillow (pip install pillow). Re-run after changing a source icon.
+Needs Pillow 11.2+ for the AVIF source (pip install pillow). Re-run after changing a source icon.
 """
 from pathlib import Path
 
@@ -30,6 +30,11 @@ TILES = {
     "appletv": ("apple_tv.png", (0, 0, 0), "contain", 1.6),
     "primevideo": ("prime_video.png", (5, 120, 255), "contain", 1.4),  # pushes the rounded corners out of frame
     "youtube": ("youtube.jpg", (255, 255, 255), "whiten", 0.85),
+    "crunchyroll": ("crunchyroll.png", (255, 255, 255), "contain", 0.8),
+    "paramountplus": ("paramount_plus.jpeg", (1, 100, 232), "contain", 1.4),  # crops the wide banner to fill the tile
+    "peacock": ("peacock.avif", (13, 13, 13), "contain", 1.1),
+    "tubi": ("tubi.jpeg", (100, 0, 190), "contain", 1.2),  # crops the wide banner to fill the tile
+    "plutotv": ("pluto_tv.webp", (13, 13, 13), "contain", 1.15),
 }
 
 

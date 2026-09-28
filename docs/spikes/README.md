@@ -7,7 +7,7 @@ file or setting to change if the result differs.
 
 | Spike | Question | Status |
 |---|---|---|
-| [S1](S1.md) | Chrome + Widevine plays the seven services; resolution caps | not run |
+| [S1](S1.md) | Chrome + Widevine plays the twelve services; resolution caps | not run |
 | [S2](S2.md) | Chrome from a Steam shortcut becomes its own panel; Theater + passthrough | not run |
 | [S3](S3.md) | Can the panel go above 1280×720? | not run |
 | [S4](S4.md) | Silent extension install, seeded profile, fullscreen, Home overlay, login persistence | not run |

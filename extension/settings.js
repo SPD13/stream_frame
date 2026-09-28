@@ -42,7 +42,9 @@
   SF.SEEK_STEPS = [5, 10, 30];
   SF.VOLUME_STEPS = [5, 10, 20];
 
-  SF.DEFAULT_TILES = { order: [], hidden: [], custom: [] };
+  // hidden: built-in tiles the user hid; shown: tiles marked hiddenByDefault in services.json
+  // that the user chose to show.
+  SF.DEFAULT_TILES = { order: [], hidden: [], shown: [], custom: [] };
 
   const clone = (v) => JSON.parse(JSON.stringify(v));
 
@@ -67,6 +69,7 @@
     if (!saved || typeof saved !== 'object') return out;
     if (Array.isArray(saved.order)) out.order = saved.order.filter((x) => typeof x === 'string');
     if (Array.isArray(saved.hidden)) out.hidden = saved.hidden.filter((x) => typeof x === 'string');
+    if (Array.isArray(saved.shown)) out.shown = saved.shown.filter((x) => typeof x === 'string');
     if (Array.isArray(saved.custom)) {
       out.custom = saved.custom.filter(
         (t) => t && typeof t.id === 'string' && typeof t.name === 'string' && typeof t.url === 'string'

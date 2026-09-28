@@ -75,7 +75,9 @@ def seed(args):
         now = chrome_time()
         bm = json.loads((seed_dir / "Bookmarks.json").read_text().replace("@NOW@", now))
         services = json.loads(Path(args.services).read_text())
-        entries = [{"name": "Home", "url": args.home_url}] + [{"name": s["name"], "url": s["url"]} for s in services]
+        entries = [{"name": "Home", "url": args.home_url}] + [
+            {"name": s["name"], "url": s["url"]} for s in services if not s.get("hiddenByDefault")
+        ]
         next_id = 4
         for e in entries:
             bm["roots"]["bookmark_bar"]["children"].append(

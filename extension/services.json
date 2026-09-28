@@ -5,5 +5,10 @@
   { "id": "disneyplus", "name": "Disney+",     "url": "https://www.disneyplus.com/home", "color": "#0063E5", "logo": "logos/disneyplus.png", "logoFit": "cover" },
   { "id": "appletv",    "name": "Apple TV+",   "url": "https://tv.apple.com/",           "color": "#000000", "logo": "logos/appletv.png",    "logoFit": "cover" },
   { "id": "primevideo", "name": "Prime Video", "url": "https://www.primevideo.com/",     "color": "#0578FF", "logo": "logos/primevideo.png", "logoFit": "cover" },
-  { "id": "youtube",    "name": "YouTube",     "url": "https://www.youtube.com/",        "color": "#FFFFFF", "logo": "logos/youtube.png",    "logoFit": "cover" }
+  { "id": "youtube",    "name": "YouTube",     "url": "https://www.youtube.com/",        "color": "#FFFFFF", "logo": "logos/youtube.png",    "logoFit": "cover" },
+  { "id": "crunchyroll",   "name": "Crunchyroll", "url": "https://www.crunchyroll.com/",           "color": "#FFFFFF", "logo": "logos/crunchyroll.png",   "logoFit": "cover", "hiddenByDefault": true },
+  { "id": "paramountplus", "name": "Paramount+",  "url": "https://www.paramountplus.com/home/",    "color": "#0164E8", "logo": "logos/paramountplus.png", "logoFit": "cover" },
+  { "id": "peacock",       "name": "Peacock",     "url": "https://www.peacocktv.com/watch/home",   "color": "#0D0D0D", "logo": "logos/peacock.png",       "logoFit": "cover", "hiddenByDefault": true },
+  { "id": "tubi",          "name": "Tubi",        "url": "https://tubitv.com/home",                "color": "#6400BE", "logo": "logos/tubi.png",          "logoFit": "cover", "hiddenByDefault": true },
+  { "id": "plutotv",       "name": "Pluto TV",    "url": "https://pluto.tv/",                      "color": "#0D0D0D", "logo": "logos/plutotv.png",       "logoFit": "cover", "hiddenByDefault": true }
 ]

@@ -104,9 +104,9 @@ try {
 
   // 1. boot.html redirects to the start page
   check('boot.html redirects to the extension start page', await waitFor(`location.href === ${JSON.stringify(HOME)}`));
-  check('seven default tiles', await waitFor(`document.querySelectorAll('#grid .tile').length === 7`));
+  check('eight default tiles', await waitFor(`document.querySelectorAll('#grid .tile').length === 8`));
   await sleep(+process.env.LOGO_WAIT || 500); // LOGO_WAIT=4000 when testing site-icon fallbacks
-  check('built-in services use full-bleed tile images', (await ev(`document.querySelectorAll('#grid .tile img.cover').length`)) === 7);
+  check('built-in services use full-bleed tile images', (await ev(`document.querySelectorAll('#grid .tile img.cover').length`)) === 8);
   check('logos loaded', await ev(`[...document.querySelectorAll('#grid .tile img')].every(i => i.complete && i.naturalWidth > 0)`));
   check('Widevine banner hidden or shown (informational)', true, '→ banner hidden: ' + await ev(`document.getElementById('drm-banner').hidden`));
   await shot('01-home.png');
@@ -114,8 +114,10 @@ try {
   // 2. Tiles tab: hide Hulu, move YouTube to the top, add a custom tile
   await click('#gear');
   check('configuration dialog opens', await ev(`document.getElementById('config').open`));
+  check('config lists hidden-by-default tiles', (await ev(`document.querySelectorAll('.tile-row').length`)) === 12);
   await click('[data-id="hulu"] input[type=checkbox]');
-  for (let i = 0; i < 6; i++) await click('[data-id="youtube"] .move.up:not([disabled])').catch(() => {});
+  await click('[data-id="tubi"] input[type=checkbox]');
+  for (let i = 0; i < 11; i++) await click('[data-id="youtube"] .move.up:not([disabled])').catch(() => {});
   await click('#f-name'); await ev(`document.getElementById('f-name').value = 'Jellyfin'`);
   await ev(`document.getElementById('f-url').value = 'jellyfin.local:8096'`);
   await click('#f-submit');
@@ -136,6 +138,7 @@ try {
   const tiles = await ev(`chrome.storage.local.get('tiles').then(s => s.tiles)`);
   check('YouTube moved first', tiles.order[0] === 'youtube', JSON.stringify(tiles.order));
   check('Hulu hidden', tiles.hidden.includes('hulu'));
+  check('Tubi shown', tiles.shown.includes('tubi') && !tiles.hidden.includes('tubi'), JSON.stringify(tiles));
   check('custom tile saved with normalised URL', tiles.custom[0]?.url === 'https://jellyfin.local:8096/', JSON.stringify(tiles.custom));
 
   // 3. Controls tab: capture KeyP for play/pause
@@ -165,7 +168,7 @@ try {
   await waitFor(`document.querySelectorAll('#grid .tile').length > 0`);
   await sleep(600);
   const names = await ev(`[...document.querySelectorAll('#grid .tile .name')].map(n => n.textContent)`);
-  check('grid persisted after reload', names[0] === 'YouTube' && !names.includes('Hulu') && names.at(-1) === 'Jellyfin', JSON.stringify(names));
+  check('grid persisted after reload', names[0] === 'YouTube' && !names.includes('Hulu') && names.includes('Tubi') && !names.includes('Peacock') && names.at(-1) === 'Jellyfin', JSON.stringify(names));
   await shot('04-home-custom.png');
 
   // 5. keyboard grid navigation

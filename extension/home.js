@@ -36,7 +36,11 @@
     const byId = new Map(list.map((t) => [t.id, t]));
     const order = tileCfg.order.filter((id) => byId.has(id));
     for (const t of list) if (!order.includes(t.id)) order.push(t.id);
-    return order.map((id) => ({ ...byId.get(id), hidden: tileCfg.hidden.includes(id) }));
+    return order.map((id) => {
+      const t = byId.get(id);
+      const hidden = t.hiddenByDefault ? !tileCfg.shown.includes(id) : tileCfg.hidden.includes(id);
+      return { ...t, hidden };
+    });
   }
 
   function commitTiles() {
@@ -208,7 +212,9 @@
       shown.checked = !t.hidden;
       shown.addEventListener('change', () => {
         tileCfg.hidden = tileCfg.hidden.filter((x) => x !== t.id);
-        if (!shown.checked) tileCfg.hidden.push(t.id);
+        tileCfg.shown = tileCfg.shown.filter((x) => x !== t.id);
+        if (t.hiddenByDefault && shown.checked) tileCfg.shown.push(t.id);
+        if (!t.hiddenByDefault && !shown.checked) tileCfg.hidden.push(t.id);
         commitTiles();
         $(`[data-id="${CSS.escape(t.id)}"] input[type=checkbox]`, tileList)?.focus();
       });
@@ -690,7 +696,7 @@
     const fail = (why) => {
       banner.innerHTML =
         '<strong>Widevine DRM is not available in this browser' + (why ? ` (${why})` : '') + '.</strong> ' +
-        'Netflix, HBO Max, Hulu, Disney+, Apple TV+ and Prime Video will not play; YouTube still works. ' +
+        'Netflix, HBO Max, Hulu, Disney+, Apple TV+, Prime Video and the other paid services will not play; YouTube still works. ' +
         'Stream Frame needs Google Chrome, not Chromium: re-run <code>install.sh</code> over SSH. ' +
         'If Chrome was just installed, open <code>chrome://components</code>, update “Widevine Content Decryption Module”, then relaunch.';
       banner.hidden = false;
