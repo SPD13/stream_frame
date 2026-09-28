@@ -29,6 +29,7 @@ UA_EXPERIMENT=0              # 1: ChromeOS user agent (ToS grey area, off by def
 UA_STRING='Mozilla/5.0 (X11; CrOS aarch64 16433.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
 TAG_WINDOW=auto              # auto: set STEAM_GAME on the Chrome window if gamescope did not; 0: never
 EXTRA_FLAGS=                 # extra Chrome flags, space separated
+REMOTE_SERVER=1              # 1: run the send-from-phone server (lib/remote.py); 0: never
 # shellcheck source=/dev/null
 [[ -f $SF_CONFIG ]] && . "$SF_CONFIG"
 export CHROME_BACKEND
@@ -98,13 +99,22 @@ if (( print_only )); then
   exit 0
 fi
 
+already_running=0
 if pgrep -f -- "--user-data-dir=$profile" >/dev/null 2>&1; then
+  already_running=1
   echo "warning: Chrome is already running on the Stream Frame profile; the new launch will join it"
 fi
 
 # 4. Panel identity: make sure gamescope can map the window to this shortcut's panel.
 if [[ $TAG_WINDOW != 0 && -n ${SteamGameId:-} ]]; then
   "$lib/tag-window.sh" "$SteamGameId" &
+fi
+
+# 5. Send-from-phone server. Its settings live in Configuration › Server on the start page.
+#    --watch-pid $$: after the exec below, $$ is Chrome, so the server stops with it.
+if [[ $REMOTE_SERVER != 0 && -n $ext_id ]] && (( ! already_running )) && command -v python3 >/dev/null 2>&1; then
+  python3 "$lib/remote.py" --services "$lib/../extension/services.json" --ext-id "$ext_id" \
+    --state-dir "$SF_STATE" --watch-pid $$ &
 fi
 
 echo "exec: ${SF_CHROME_CMD[*]} ${flags[*]} $start"

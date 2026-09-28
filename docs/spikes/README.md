@@ -13,3 +13,4 @@ file or setting to change if the result differs.
 | [S4](S4.md) | Silent extension install, seeded profile, fullscreen, Home overlay, login persistence | not run |
 | [S5](S5.md) | Does SteamVR remember the panel's dock state? | not run |
 | [S6](S6.md) | What controller events reach the page? Can a layout be shipped? | not run |
+| [S7](S7.md) | Can a phone reach the headset and send a link? Does the link channel stay up? | not run |

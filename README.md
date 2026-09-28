@@ -10,6 +10,10 @@ adds a **Stream Frame** entry to your Steam library. Launch it and Chrome opens 
 start page of service tiles. SteamVR's dashboard does the rest: *View in Theater*, *Float in
 World*, curvature, size, passthrough behind it.
 
+Browsing a catalogue with a laser pointer is slow, so you can also
+[send a link from your phone](#send-a-link-from-your-phone): tap **Share** in a streaming app,
+paste the link into a page the headset serves on your Wi-Fi, and the title opens on the headset.
+
 > **Status:** the code is complete and tested on a Mac, but has **not yet been run on a Steam
 > Frame**. The on-device checks in [`docs/spikes/`](docs/spikes/README.md) verify the assumptions
 > it rests on (extension provisioning, panel mapping, controller events, resolution). Expect
@@ -17,7 +21,8 @@ World*, curvature, size, passthrough behind it.
 
 **Contents:** [Picture quality](#picture-quality-read-this-first) ·
 [Requirements](#requirements) · [Build](#build) · [Install on the Steam Frame](#install-on-the-steam-frame) ·
-[Update and uninstall](#update-and-uninstall) · [Use](#use) · [Troubleshooting](#troubleshooting) ·
+[Update and uninstall](#update-and-uninstall) · [Use](#use) ·
+[Send a link from your phone](#send-a-link-from-your-phone) · [Troubleshooting](#troubleshooting) ·
 [Develop and test on a computer](#develop-and-test-on-a-computer) · [How it works](#how-it-works)
 
 ## Picture quality: read this first
@@ -102,7 +107,7 @@ that id. The private key lives at `extension/key.pem` and is **never committed**
 
 ```sh
 extension/build-crx.sh
-# build-crx: wrote dist/stream-frame-helper.crx (id cjgndomenjkjikknkabepmobpflkbchl, version 1.0.0)
+# build-crx: wrote dist/stream-frame-helper.crx (id cjgndomenjkjikknkabepmobpflkbchl, version 1.1.0)
 ```
 
 The script zips `extension/` (skipping the key and itself), signs it in the CRX3 format with
@@ -290,8 +295,10 @@ The gear icon on the start page opens **Configuration**:
   action; assigning a button moves it from any other action). The *Receiving* strip shows what
   the page receives and whether the controller is in gamepad or keyboard mode. Also: seek step
   (5/10/30 s), volume step, Home confirmation on or off, reset to defaults.
+- **Server:** the [send-from-phone](#send-a-link-from-your-phone) server: on or off, its port,
+  and an optional confirmation code. The status line shows the address phones use.
 
-Both are saved in the profile (`chrome.storage.local`) and survive relaunches and reboots.
+All three are saved in the profile (`chrome.storage.local`) and survive relaunches and reboots.
 
 ### Launcher settings
 
@@ -307,6 +314,74 @@ Both are saved in the profile (`chrome.storage.local`) and survive relaunches an
 | `UA_EXPERIMENT` | `0` | `1` presents a ChromeOS user agent (ToS grey area) |
 | `TAG_WINDOW` | `auto` | set the panel mapping property if gamescope did not; `0` never |
 | `EXTRA_FLAGS` | empty | extra Chrome flags |
+| `REMOTE_SERVER` | `1` | `0` never starts the [send-from-phone](#send-a-link-from-your-phone) server, whatever Configuration › Server says |
+
+## Send a link from your phone
+
+Find a film or show on your phone, where browsing is quick, and send it to the headset.
+
+1. Put the phone on the same Wi-Fi as the headset.
+2. On the phone, open the address shown at the top of the Stream Frame start page, for example
+   `http://192.168.1.23:8765`. Bookmark it or add it to the home screen for next time.
+3. If the confirmation code is on, type the 6-digit code shown next to the address. The phone
+   remembers it until the code changes.
+4. In the streaming app, open the title, tap **Share**, then **Copy**. Copying the whole message
+   is fine: Prime Video and HBO Max add a sentence, and the page picks the link out of it.
+5. Paste it into the page and tap **Send to headset**.
+
+The headset opens the title in the current tab. If a video is playing, it asks first:
+*Open this Netflix link?* Press A (or Enter, or click **Yes**) to open it; any other button keeps
+watching. The prompt closes by itself after 30 seconds. The phone page shows what happened:
+opened, waiting for confirmation, cancelled, or why it could not be sent.
+
+**Supported links:** the built-in services only (Netflix, HBO Max, Hulu, Disney+, Apple TV+,
+Prime Video, YouTube, Crunchyroll, Paramount+, Peacock, Tubi and Pluto TV), whether or not their
+tile is shown, and only `https` links. Share and redirect domains of those services work too,
+for example `watch.amazon.com` (Prime Video) and `play.hbomax.com`. Links to anything else,
+including your own custom tiles, are refused. The allowed domains are the `hosts` lists in
+[`extension/services.json`](extension/services.json).
+
+### Configuration › Server
+
+| Option | Default | Effect |
+|---|---|---|
+| Let phones send links to the headset | on | Off closes the phone port straight away; the address disappears from the start page. |
+| Port | `8765` | The port phones connect to, 1024 to 65535 (not 47800, which Stream Frame uses itself). The server moves to it as soon as you press **Apply**; phones must then use the new address. |
+| Require a confirmation code | off | **Off:** anyone on the Wi-Fi can open the page and send links, with no code. **On:** a random 6-digit code is created and shown in this tab and on the start page. A phone must type it once before it can send links. After 5 wrong codes a phone is locked out for a minute; after 30 wrong codes in total, code entry is blocked until you press **New code**. Turning the code off and on again keeps the same code but signs every phone out. |
+| New code | | Replaces the code and signs every phone out. |
+
+Every change restarts the server with the new settings at once. The status line reads *Running
+at http://…* when it is ready, *Off*, or the reason it cannot run (for example *Port 8765 is
+already in use*, or *Server not running* if Stream Frame was started without it). It may also
+suggest a `http://<name>.local:8765` address, which some phones resolve and others do not.
+
+### Share-sheet shortcut (skip the copy and paste)
+
+The page is backed by a small JSON API, so a phone shortcut can send the link straight from the
+share sheet: `POST http://<address>/open` with `Content-Type: application/json` and the body
+`{"text": "<shared link or text>"}`. If the confirmation code is on, add `"code": "123456"` to
+the body. The reply is JSON with a `status` of `opened`, `prompting` (waiting for confirmation on
+the headset), `not_connected`, `unsupported`, `no_link`, `code_required`, `wrong` or
+`rate_limited`.
+
+- **iPhone (Shortcuts app):** create a shortcut, open its details and turn on *Show in Share
+  Sheet* (accepting URLs and text). Add *Get Contents of URL* with the address above plus `/open`,
+  method *POST*, request body *JSON*, and a text field `text` set to *Shortcut Input* (plus a
+  `code` field if needed). In an app, **Share** → your shortcut.
+- **Android:** an HTTP request app that can receive shared text, such as *HTTP Shortcuts*, does
+  the same: a POST to `/open` with the JSON body above, the shared text in `text`.
+
+### Security
+
+- With the code off, anyone on the Wi-Fi can make the headset open a streaming page (nothing
+  else). Turn the code on for shared, office or public networks.
+- The server runs only while Stream Frame is open, and only accepts JSON posts from the page
+  itself, which ordinary websites cannot forge. It answers only to IP addresses and `.local`
+  names, which defeats DNS-rebinding tricks from websites.
+- The code and the signed-in phones are kept in `~/.local/state/stream-frame/remote.json`,
+  readable by your user only.
+- Stream Frame talks to its own server over `127.0.0.1:47800`, a fixed port that only the helper
+  extension may use (checked by origin) and that is not reachable from the network.
 
 ## Troubleshooting
 
@@ -319,6 +394,10 @@ Both are saved in the profile (`chrome.storage.local`) and survive relaunches an
 | Shortcut missing from the library | See [Run the installer](#3-run-the-installer) for `--enable-cef-debugging` or adding it by hand. |
 | Controller buttons do nothing | Open the gear icon → Controls: the *Receiving* strip shows whether any input reaches the page. Change the shortcut's controller layout in Steam (gamepad or keyboard/mouse). |
 | Headset screenshot for a bug report | From the build machine: `tools/frame-shot.sh steamos@<frame-ip>`. |
+| No address on the start page | Open the gear icon → Server. *Server not running*: relaunch Stream Frame, check `REMOTE_SERVER` in `config.env`, and read `launcher.log` (lines start with `remote:`). *No network connection*: connect the headset to Wi-Fi. |
+| The phone cannot open the address | The phone must be on the same network, not a guest network, and the router must not isolate devices from each other ("AP/client isolation"). Try the other address the Server tab suggests. |
+| *Port … is already in use* | Another program uses that port: choose another one in Configuration › Server. |
+| The phone says *The headset is not ready* | Stream Frame is closed, or still starting: wait a few seconds and send again. |
 
 ## Develop and test on a computer
 
@@ -352,12 +431,42 @@ Any USB or Bluetooth gamepad exercises the controller mapper: press a button, th
 Controls tab's *Receiving* strip. Picture quality on a desktop is higher than on the Frame, so
 do not judge resolution there.
 
+### Send a link from your phone, on a computer
+
+On the Frame, `bin/stream-frame` starts the [send-from-phone](#send-a-link-from-your-phone)
+server next to Chrome. When you open Chrome yourself, nothing starts it, and Configuration ›
+Server shows *Server not running*. Start it by hand from the repository folder and leave it
+running in its own terminal:
+
+```sh
+python3 lib/remote.py --services extension/services.json \
+  --ext-id cjgndomenjkjikknkabepmobpflkbchl --state-dir /tmp/sf-remote
+```
+
+Reload the start page. The extension connects when the page opens (or within 30 seconds), the
+Server tab shows *Running at http://<computer's IP>:8765/*, and the address appears in the
+start-page header.
+
+- **Send from the same computer:** open `http://127.0.0.1:8765` in another browser tab.
+- **Send from a phone:** use the address the Server tab shows, with the phone on the same Wi-Fi.
+  The first time, macOS may ask whether Python can accept incoming network connections: allow
+  it, or the phone cannot connect.
+- **The prompt while playing:** start a video (YouTube, Netflix…) in the test Chrome, then send a
+  link.
+
+The terminal prints `remote:` lines as things happen (extension connected, links sent, wrong
+codes). Settings, the code and signed-in phones are kept in `/tmp/sf-remote/remote.json`; delete
+the folder to start fresh. If `chrome://extensions` shows the extension under another id, pass
+that id to `--ext-id`, or the server refuses the connection. Stop the server with Ctrl+C.
+
 ### Automated end-to-end test
 
 `tests/e2e.mjs` drives the extension in **Chrome for Testing** over the DevTools protocol (branded
 Chrome 137+ ignores `--load-extension`). It checks the boot redirect, the start page and tiles,
 Configuration (tiles and controls), persistence, the keyboard mapper on a local video page,
-fullscreen, typing protection, and the Home confirmation and button: 36 checks.
+fullscreen, typing protection, the Home confirmation and button, and send-from-phone (the Server
+tab, port changes, the confirmation code, opening a link, and the prompt while a video plays): 61
+checks. It runs `lib/remote.py`, so it needs `python3` and the ports 8765, 8766, 8790 and 47800.
 
 ```sh
 npx @puppeteer/browsers install chrome@stable            # prints the Chrome for Testing path
@@ -367,6 +476,13 @@ CHROME=/path/to/chrome-for-testing node tests/e2e.mjs    # Node 22+
 Screenshots are saved in `tests/out/`. Gamepad input is not simulated, and Chrome for Testing has
 no Widevine, so use desktop Chrome for real playback.
 
+The send-from-phone server also has unit tests (link extraction, allowlist, WebSocket origin
+check, code flow and lockouts, restarts):
+
+```sh
+python3 -m unittest tests/test_remote.py
+```
+
 ## How it works
 
 ```
@@ -375,6 +491,10 @@ Steam library shortcut "Stream Frame"
     picks the Chrome backend, execs Chrome with --ozone-platform=x11 on gamescope's :0,
     --user-data-dir=~/.local/share/stream-frame/profile, --start-fullscreen, --password-store=basic
   → web/boot.html → chrome-extension://<id>/home.html (start page, from the helper extension)
+  → lib/remote.py, started alongside and stopped with Chrome:
+      127.0.0.1:47800  WebSocket to the extension's background worker (settings in, links out)
+      0.0.0.0:<port>   the phone page (web/remote.html) and its JSON API; restarted on every
+                       Configuration › Server change
   → gamescope gives the window its own SteamVR panel: valve.steam.desktopgame.<appid>
     (lib/tag-window.sh sets STEAM_GAME on the window if gamescope did not map it itself)
 ```
@@ -388,14 +508,16 @@ Steam library shortcut "Stream Frame"
 | `lib/seed-profile.py`, `lib/profile-seed/` | Preferences, Bookmarks, External Extensions |
 | `lib/tag-window.sh` | STEAM_GAME fallback for panel mapping |
 | `lib/config.env.example` | launcher settings template |
+| `lib/remote.py`, `web/remote.html` | send-from-phone server (stdlib only) and the page phones open |
 | `extension/` | *Stream Frame Helper* (Manifest V3, no build step): start page, Configuration, Home button, controller mapper |
 | `extension/actions.js` | per-service quirks (Netflix goes through its player API via `bridge-netflix.js`) |
+| `extension/background.js` | keeps the link to `lib/remote.py` and opens links sent from a phone |
 | `extension/build-crx.sh` | packs and signs the `.crx` |
 | `web/boot.html` | first page; redirects to the start page or explains how to fix a missing helper |
 | `assets/raw_icons/`, `tools/make-tiles.py` | source icons and the tile renderer |
 | `tools/make-icon.py` | app icon renderer |
 | `tools/frame-shot.sh` | headset-view screenshot over SSH (OpenVR IVRScreenshots) |
-| `tests/` | end-to-end test and its local player page |
+| `tests/` | end-to-end test and its local player page; unit tests for `lib/remote.py` |
 | `input/` | placeholder for a default Steam Input layout (pending spike S6) |
 | `docs/plan.md`, `docs/spikes/`, `docs/quality.md` | plan, on-device spike worksheets, measured quality |
 
@@ -414,3 +536,4 @@ serves neither.
 - Panel, gamescope, DevTools-port and uinput field notes: [saphid/frame-control](https://github.com/saphid/frame-control) (MIT).
 - LD_PRELOAD fix, x11 ozone flag and the DevTools shortcut approach:
   [saphid/chromium-webxr-steam-frame](https://github.com/saphid/chromium-webxr-steam-frame); `lib/steam-shortcut.py` is a rewrite of its `frame/steam-shortcut.py`.
+- Built with [Claude Code](https://claude.com/claude-code).

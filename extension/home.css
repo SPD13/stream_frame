@@ -66,6 +66,9 @@ button:disabled { opacity: .4; cursor: default; }
   font-size: 30px; font-weight: 700; letter-spacing: -.01em;
 }
 .brand img { width: 44px; height: 44px; border-radius: 10px; }
+.remote-hint { margin: 0; font-size: 16px; color: var(--muted); user-select: text; }
+.remote-hint strong { color: var(--accent); font-weight: 600; }
+.remote-hint .code { font-variant-numeric: tabular-nums; letter-spacing: .08em; }
 .clock { font-size: 26px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .banner {
@@ -248,3 +251,28 @@ dialog[open] { display: flex; flex-direction: column; }
 .pad-nav :focus { outline: 4px solid var(--accent); outline-offset: 3px; }
 .pad-nav .tile:focus { outline: none; }
 .pad-nav .tile:focus .logo-box { transform: scale(1.045); box-shadow: 0 16px 40px rgba(0, 0, 0, .6), 0 0 0 4px var(--accent); }
+
+/* ---------- server tab ---------- */
+
+.server-status {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px;
+  padding: 14px 18px; margin: 0 0 18px;
+  border-radius: 14px; background: var(--bg-2); border: 1px solid var(--line);
+  user-select: text;
+}
+.server-status .label { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.server-status .ok strong { color: var(--accent); }
+.server-status .bad { color: #ff8a8e; }
+.server-status .note { margin: 0; min-height: 0; }
+.server-options { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 18px; }
+.port-row { display: flex; align-items: flex-end; gap: 12px; padding-left: 8px; }
+.port-row label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.port-row input { width: 140px; min-height: 48px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); }
+.port-row .error { margin: 0 0 12px; }
+.code-box[hidden] { display: none; }
+.code-box { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; padding-left: 8px; }
+.code-box .code {
+  font-size: 40px; font-weight: 700; letter-spacing: .18em; font-variant-numeric: tabular-nums;
+  padding: 4px 18px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); user-select: text;
+}
+.code-box .note { flex-basis: 100%; margin: 0; }

@@ -1,11 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Stream Frame Helper",
-  "version": "1.0.0",
-  "description": "Start page, Home button and controller mapping for Stream Frame on the Steam Frame.",
+  "version": "1.1.0",
+  "description": "Start page, Home button, controller mapping and send-from-phone for Stream Frame on the Steam Frame.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1EqUisbXg2ejUTBSWYzddBkwUHfq1E5KvCQCBWAN2MH1UCXRJC0rCEHTM+GFojde3AMLG0CDdgf5AjgibgQYnzwaOcikdjIFUI7AMOyzfUZxlEA06LLblwJfmaZb6LxCw5QkpVctLEJCg4P8YoP2LgGyILxON4onCkIZJmwGQSRDueAlgMoOfpyIpjazYyClKOdNqXWa97F2/yeyzSd22L1N6VbiuBbVPLTwtr06NPf/6gBGm/l3vHoLWzhwPeymNHyF8QKupxALS/7AFSpQ3OmYmh5G4VAWpLoDUmp+Z5QqV1XOfBgcMAnwIUQ1iLCnyv4DHi50QNS5Hc1ijG9mkQIDAQAB",
   "minimum_chrome_version": "120",
-  "permissions": ["storage"],
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "service_worker": "background.js" },
   "icons": { "128": "icons/icon128.png" },
   "chrome_url_overrides": { "newtab": "home.html" },
   "content_scripts": [

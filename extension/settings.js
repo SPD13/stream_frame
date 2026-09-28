@@ -1,5 +1,5 @@
-// Shared by the start page and the content script: action list, default controls,
-// and load/save helpers for chrome.storage.local.
+// Shared by the start page, the content script and the background worker: action list,
+// default controls and server settings, and load/save helpers for chrome.storage.local.
 (function (g) {
   'use strict';
   const SF = (g.StreamFrame = g.StreamFrame || {});
@@ -46,6 +46,11 @@
   // that the user chose to show.
   SF.DEFAULT_TILES = { order: [], hidden: [], shown: [], custom: [] };
 
+  // "Send from your phone" server (lib/remote.py). CONTROL_PORT is its fixed localhost
+  // port for this extension; port is the one phones use.
+  SF.CONTROL_PORT = 47800;
+  SF.DEFAULT_SERVER = { enabled: true, port: 8765, codeEnabled: false, code: '' };
+
   const clone = (v) => JSON.parse(JSON.stringify(v));
 
   SF.normalizeControls = function (saved) {
@@ -78,13 +83,33 @@
     return out;
   };
 
+  SF.validServerPort = (p) => Number.isInteger(p) && p >= 1024 && p <= 65535 && p !== SF.CONTROL_PORT;
+
+  SF.normalizeServer = function (saved) {
+    const out = clone(SF.DEFAULT_SERVER);
+    if (!saved || typeof saved !== 'object') return out;
+    if (typeof saved.enabled === 'boolean') out.enabled = saved.enabled;
+    if (SF.validServerPort(saved.port)) out.port = saved.port;
+    if (typeof saved.code === 'string' && /^\d{6}$/.test(saved.code)) out.code = saved.code;
+    if (typeof saved.codeEnabled === 'boolean') out.codeEnabled = saved.codeEnabled && !!out.code;
+    return out;
+  };
+
+  // Six random digits for the phone confirmation code.
+  SF.newServerCode = () => String(crypto.getRandomValues(new Uint32Array(1))[0] % 1e6).padStart(6, '0');
+
   SF.loadSettings = async function () {
-    const s = await chrome.storage.local.get(['tiles', 'controls']);
-    return { tiles: SF.normalizeTiles(s.tiles), controls: SF.normalizeControls(s.controls) };
+    const s = await chrome.storage.local.get(['tiles', 'controls', 'server']);
+    return {
+      tiles: SF.normalizeTiles(s.tiles),
+      controls: SF.normalizeControls(s.controls),
+      server: SF.normalizeServer(s.server),
+    };
   };
 
   SF.saveTiles = (tiles) => chrome.storage.local.set({ tiles });
   SF.saveControls = (controls) => chrome.storage.local.set({ controls });
+  SF.saveServer = (server) => chrome.storage.local.set({ server });
 
   SF.homeUrl = () => chrome.runtime.getURL('home.html');
 })(globalThis);

@@ -1,7 +1,8 @@
 // Injected into every web page opened in the Stream Frame profile:
 //  - an auto-hiding Home button that returns to the start page,
 //  - the controller mapper (keyboard events + Gamepad API) that drives the player,
-//  - the Home confirmation overlay and a small on-screen display for feedback.
+//  - the Home confirmation overlay and a small on-screen display for feedback,
+//  - the "open this link?" prompt for links sent from a phone while a video plays.
 // UI lives in a closed shadow root promoted to the top layer, so site CSS cannot
 // restyle it and it stays visible above element fullscreen.
 (function () {
@@ -12,6 +13,9 @@
   const HOME_BUTTON_IDLE_MS = 3000;
   const CONFIRM_REPRESS_MS = 3000;
   const HOLD_MS = 700;
+  const LINK_PROMPT_MS = 30000;
+  // Buttons that accept a link prompt; anything else declines it.
+  const LINK_YES = new Set(['btn:0', 'key:Enter', 'key:NumpadEnter', 'key:Space']);
 
   let controls = SF.normalizeControls(null);
   let pressMap = new Map(); // binding id -> action
@@ -44,7 +48,7 @@
 
   // ---------- overlay UI ----------
 
-  let host, root, homeBtn, osdEl, confirmEl, confirmHint, confirmBar;
+  let host, root, homeBtn, osdEl, confirmEl, confirmTitle, confirmHint, confirmBar;
   let homeBtnTimer = 0;
   let osdTimer = 0;
 
@@ -111,7 +115,7 @@
       <div class="osd" role="status" aria-live="polite"></div>
       <div class="confirm-wrap" role="dialog" aria-modal="true" aria-labelledby="sf-confirm-title">
         <div class="confirm">
-          <h2 id="sf-confirm-title">Return to Stream Frame home?</h2>
+          <h2 id="sf-confirm-title"></h2>
           <p class="hint"></p>
           <div class="bar"></div>
           <div class="row">
@@ -123,10 +127,11 @@
     homeBtn = root.querySelector('.home');
     osdEl = root.querySelector('.osd');
     confirmEl = root.querySelector('.confirm-wrap');
+    confirmTitle = root.querySelector('h2');
     confirmHint = root.querySelector('.hint');
     confirmBar = root.querySelector('.bar');
     homeBtn.addEventListener('click', () => goHome());
-    root.querySelector('.yes').addEventListener('click', () => goHome());
+    root.querySelector('.yes').addEventListener('click', () => confirmYes());
     root.querySelector('.no').addEventListener('click', () => closeConfirm());
     confirmEl.addEventListener('click', (e) => {
       if (e.target === confirmEl) closeConfirm();
@@ -177,18 +182,19 @@
 
   // ---------- Home + confirmation ----------
 
-  let confirmBinding = null;
-  let confirmSince = 0;
+  // The open confirmation, if any:
+  //   { kind: 'home', binding, since }  Home pressed: pressing it again confirms.
+  //   { kind: 'link', respond, timer }  a link from a phone: A/Enter opens it.
+  let confirm = null;
 
   function goHome() {
     location.href = SF.homeUrl();
   }
 
-  function openConfirm(binding) {
-    if (!ensureUi()) return goHome();
-    confirmBinding = SF.baseBinding(binding);
-    confirmSince = performance.now();
-    confirmHint.textContent = `Press ${SF.bindingName(confirmBinding)} again to confirm, any other button to cancel.`;
+  function showConfirm(title, hint, durationMs) {
+    confirmTitle.textContent = title;
+    confirmHint.textContent = hint;
+    confirmBar.style.animationDuration = durationMs + 'ms';
     confirmBar.classList.remove('run');
     void confirmBar.offsetWidth; // restart the animation
     confirmBar.classList.add('run');
@@ -196,21 +202,71 @@
     raise();
   }
 
-  function closeConfirm() {
-    confirmEl.classList.remove('open');
-    confirmBinding = null;
+  function openConfirm(binding) {
+    if (!ensureUi()) return goHome();
+    if (confirm && confirm.kind === 'link') closeConfirm();
+    confirm = { kind: 'home', binding: SF.baseBinding(binding), since: performance.now() };
+    showConfirm(
+      'Return to Stream Frame home?',
+      `Press ${SF.bindingName(confirm.binding)} again to confirm, any other button to cancel.`,
+      CONFIRM_REPRESS_MS
+    );
   }
 
-  const confirmOpen = () => confirmBinding !== null;
+  // respond(answer) receives 'yes', 'no' or 'expired'.
+  function openLinkPrompt(serviceName, respond) {
+    if (!ensureUi()) return respond('yes');
+    closeConfirm(); // a newer link replaces an unanswered one
+    confirm = { kind: 'link', respond, timer: setTimeout(() => closeConfirm('expired'), LINK_PROMPT_MS) };
+    showConfirm(
+      `Open this ${serviceName} link?`,
+      `Sent from your phone. Press ${SF.bindingName('btn:0')} or Enter to open it, any other button to keep watching.`,
+      LINK_PROMPT_MS
+    );
+  }
+
+  function closeConfirm(answer = 'no') {
+    if (!confirm) return;
+    const c = confirm;
+    confirm = null;
+    confirmEl.classList.remove('open');
+    if (c.kind === 'link') {
+      clearTimeout(c.timer);
+      c.respond(answer);
+    }
+  }
+
+  function confirmYes() {
+    if (confirm && confirm.kind === 'link') closeConfirm('yes');
+    else goHome();
+  }
+
+  const confirmOpen = () => confirm !== null;
 
   function confirmInput(binding) {
-    if (SF.baseBinding(binding) === confirmBinding) {
-      if (performance.now() - confirmSince <= CONFIRM_REPRESS_MS) goHome();
+    const base = SF.baseBinding(binding);
+    if (confirm.kind === 'link') {
+      closeConfirm(LINK_YES.has(base) ? 'yes' : 'no');
+    } else if (base === confirm.binding) {
+      if (performance.now() - confirm.since <= CONFIRM_REPRESS_MS) goHome();
       else openConfirm(binding); // late re-press restarts the window
     } else {
       closeConfirm();
     }
   }
+
+  // Links from a phone (background.js): ask first only if a video is playing.
+  chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
+    if (!msg || msg.type !== 'sf-link') return false;
+    const v = SF.pickVideo();
+    if (!v || v.paused || v.ended) {
+      respond('no-video');
+      return false;
+    }
+    openLinkPrompt(msg.serviceName || 'streaming', respond);
+    chrome.runtime.sendMessage({ type: 'sf-link-prompting', id: msg.id }).catch(() => {});
+    return true;
+  });
 
   // ---------- dispatch ----------
 

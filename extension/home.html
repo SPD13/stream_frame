@@ -10,6 +10,7 @@
 <body>
   <header class="top">
     <h1 class="brand"><img src="icons/icon128.png" alt=""> Stream Frame</h1>
+    <p id="remote-hint" class="remote-hint" hidden></p>
     <div class="clock" id="clock" aria-hidden="true"></div>
     <button id="gear" class="icon-btn" type="button" title="Configuration" aria-label="Configuration">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.66 0-1.25.4-1.51 1z"/></svg>
@@ -31,6 +32,7 @@
       <div class="tabs" role="tablist">
         <button role="tab" type="button" id="tab-tiles" aria-controls="panel-tiles" aria-selected="true">Tiles</button>
         <button role="tab" type="button" id="tab-controls" aria-controls="panel-controls" aria-selected="false" tabindex="-1">Controls</button>
+        <button role="tab" type="button" id="tab-server" aria-controls="panel-server" aria-selected="false" tabindex="-1">Server</button>
       </div>
       <button id="config-close" class="icon-btn" type="button" aria-label="Close configuration" title="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -91,6 +93,36 @@
       <div class="footer-actions">
         <button type="button" id="reset-controls" class="danger">Reset controls to defaults</button>
       </div>
+    </section>
+
+    <section id="panel-server" role="tabpanel" aria-labelledby="tab-server" hidden>
+      <p class="note">Send a film or show from a streaming app on your phone: tap <b>Share</b>, copy the link,
+        open the address below on the phone (same Wi-Fi) and paste it.</p>
+
+      <div class="server-status">
+        <span class="label">Status</span>
+        <span id="s-status" aria-live="polite"></span>
+        <span id="s-alt" class="note"></span>
+      </div>
+
+      <div class="server-options">
+        <label class="toggle"><input type="checkbox" id="s-enabled"> Let phones send links to the headset</label>
+
+        <form id="s-port-form" class="port-row" novalidate>
+          <label>Port <input id="s-port" type="number" min="1024" max="65535" step="1" inputmode="numeric"></label>
+          <button type="submit" id="s-port-apply">Apply</button>
+          <span id="s-port-error" class="error" role="alert"></span>
+        </form>
+
+        <label class="toggle"><input type="checkbox" id="s-code-enabled"> Require a confirmation code</label>
+        <div id="s-code-box" class="code-box" hidden>
+          <span id="s-code" class="code" aria-label="Confirmation code"></span>
+          <button type="button" id="s-new-code">New code</button>
+          <p class="note">Type this code on the phone the first time it connects. A new code signs out every phone.</p>
+        </div>
+      </div>
+      <p class="note">Only links to the built-in streaming services are accepted. If a video is playing, the
+        headset asks before opening a link. Every change here restarts the server.</p>
     </section>
   </dialog>
 

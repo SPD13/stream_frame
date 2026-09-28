@@ -1,6 +1,8 @@
 // End-to-end test of the Stream Frame Helper extension in Chrome for Testing, over CDP.
-// Covers boot redirect, start page, Configuration (tiles + controls), persistence, and the
-// keyboard mapper / Home overlay on a local player page. Gamepad input is not simulated.
+// Covers boot redirect, start page, Configuration (tiles + controls), persistence, the
+// keyboard mapper / Home overlay on a local player page, and send-from-phone (lib/remote.py
+// with its Server tab). Gamepad input is not simulated. Needs python3 for lib/remote.py.
+// Uses ports 8765/8766 (phone page), 8790 (test site) and 47800 (remote.py control).
 //
 //   npx @puppeteer/browsers install chrome@stable      # prints the binary path
 //   CHROME=/path/to/chrome-for-testing node tests/e2e.mjs
@@ -20,7 +22,8 @@ if (!CHROME) { console.error('Set CHROME to a Chrome for Testing binary (see the
 const OUT = join(HERE, 'out') + '/';
 mkdirSync(OUT, { recursive: true });
 const PROFILE = mkdtempSync(join(tmpdir(), 'stream-frame-e2e-'));
-const SITE_PORT = 8765;
+const SITE_PORT = 8790;
+const PHONE = 'http://127.0.0.1';
 const server = createServer((req, res) => {
   res.setHeader('content-type', 'text/html');
   res.end(readFileSync(join(HERE, 'site/player.html')));
@@ -28,6 +31,11 @@ const server = createServer((req, res) => {
 const ID = 'cjgndomenjkjikknkabepmobpflkbchl';
 const HOME = `chrome-extension://${ID}/home.html`;
 const PORT = 9335;
+const STATE = mkdtempSync(join(tmpdir(), 'stream-frame-remote-'));
+const remote = spawn('python3', [
+  `${REPO}/lib/remote.py`, '--services', `${REPO}/extension/services.json`, '--ext-id', ID, '--state-dir', STATE,
+  '--bind', '127.0.0.1', '--allow-test-origin', `http://127.0.0.1:${SITE_PORT}`,
+], { stdio: ['ignore', 'ignore', process.env.REMOTE_LOG ? 'inherit' : 'ignore'] });
 
 const chrome = spawn(CHROME, [
   `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, `--load-extension=${REPO}/extension`,
@@ -97,6 +105,20 @@ async function click(selector) {
   await sleep(150);
 }
 async function navigate(url) { await send('Page.navigate', { url }); await sleep(300); }
+// The phone side of send-from-phone.
+async function phone(port, path, body, cookie) {
+  const headers = { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { Cookie: cookie } : {}) };
+  const r = await fetch(`${PHONE}:${port}${path}`, { method: body ? 'POST' : 'GET', headers, body: body && JSON.stringify(body) });
+  const text = await r.text();
+  let data = text; try { data = JSON.parse(text); } catch {}
+  return { status: r.status, data, cookie: (r.headers.getSetCookie?.()[0] || '').split(';')[0] };
+}
+const reachable = (port) => fetch(`${PHONE}:${port}/`).then(() => true, () => false);
+async function until(fn, ms = 8000) {
+  const t = Date.now();
+  while (Date.now() - t < ms) { try { if (await fn()) return true; } catch {} await sleep(150); }
+  return false;
+}
 
 try {
   await connect();
@@ -241,12 +263,74 @@ try {
   await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 60, y: hy, button: 'left', clickCount: 1 });
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 60, y: hy, button: 'left', clickCount: 1 });
   check('Home button click returns to the start page', await waitFor(`location.href === ${JSON.stringify(HOME)}`, 4000));
+
+  // 7. send from a phone: start page address, Server tab, port change, code, prompt, off
+  check('start page shows the phone address', await waitFor(`!document.getElementById('remote-hint').hidden && /http:\\/\\/[\\d.]+:8765/.test(document.getElementById('remote-hint').textContent)`, 15000),
+    await ev(`document.getElementById('remote-hint').textContent`));
+  await click('#gear');
+  await click('#tab-server');
+  check('Server tab shows the server running', await waitFor(`document.getElementById('s-status').textContent.startsWith('Running at http://')`));
+  await shot('08-config-server.png');
+  check('phone page served, no code by default', /data-needs-code="0"/.test((await phone(8765, '/')).data));
+
+  await ev(`document.getElementById('s-port').value = '8766'`);
+  await click('#s-port-apply');
+  check('port change restarts the server on the new port', await waitFor(`document.getElementById('s-status').textContent.includes(':8766')`) && await until(() => reachable(8766)));
+  check('old port closed', await until(async () => !(await reachable(8765))));
+
+  await click('#s-code-enabled');
+  const code = await ev(`document.getElementById('s-code').textContent`);
+  check('code enabled: 6-digit code shown', /^\d{6}$/.test(code), code);
+  check('code shown on the start page line', await waitFor(`document.getElementById('remote-hint').textContent.includes(${JSON.stringify(code)})`));
+  await until(async () => (await phone(8766, '/open', { text: 'x' })).status === 401);
+  check('open without the code is refused', (await phone(8766, '/open', { text: `http://127.0.0.1:${SITE_PORT}/player.html` })).data.status === 'code_required');
+  check('wrong code refused', (await phone(8766, '/auth', { code: code === '000000' ? '111111' : '000000' })).data.status === 'wrong');
+  const auth = await phone(8766, '/auth', { code });
+  check('right code accepted', auth.data.status === 'ok' && auth.cookie.startsWith('sf_session='));
+  await click('#config-close');
+
+  // nothing playing on the start page: opens straight away
+  let r = await phone(8766, '/open', { text: `Look: http://127.0.0.1:${SITE_PORT}/player.html` }, auth.cookie);
+  check('link opens immediately when nothing plays', r.data.status === 'opened', JSON.stringify(r.data));
+  check('tab navigated to the link', await waitFor(`location.pathname === '/player.html'`));
+  check('test video playing', await waitFor('window.ready === true && !document.getElementById("v").paused', 30000));
+
+  // video playing: the headset asks; any other button keeps watching
+  r = await phone(8766, '/open', { text: `http://127.0.0.1:${SITE_PORT}/player.html?next=1` }, auth.cookie);
+  check('link while playing asks on the headset', r.data.status === 'prompting', JSON.stringify(r.data));
+  await sleep(300);
+  await shot('09-link-prompt.png');
+  await key('KeyM');
+  check('declined on the headset', await until(async () => (await phone(8766, `/result?id=${r.data.id}`, null, auth.cookie)).data.status === 'declined'));
+  check('still on the same page', await ev(`location.search === ''`));
+
+  r = await phone(8766, '/open', { text: `http://127.0.0.1:${SITE_PORT}/player.html?next=2` }, auth.cookie);
+  check('second link asks again', r.data.status === 'prompting');
+  await sleep(300);
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+  check('Enter confirms and opens the link', await waitFor(`location.search === '?next=2'`));
+  check('phone sees the link opened', await until(async () => (await phone(8766, `/result?id=${r.data.id}`, null, auth.cookie)).data.status === 'opened'));
+  check('unsupported links refused', (await phone(8766, '/open', { text: 'https://example.com/' }, auth.cookie)).data.status === 'unsupported');
+
+  // switching the server off closes the port and hides the start page line
+  await navigate(HOME);
+  await waitFor(`!document.getElementById('remote-hint').hidden`);
+  await click('#gear');
+  await click('#tab-server');
+  await click('#s-enabled');
+  check('server off closes the phone port', await until(async () => !(await reachable(8766))));
+  check('server off shown in the tab', await waitFor(`document.getElementById('s-status').textContent.startsWith('Off')`));
+  await click('#config-close');
+  check('start page line hidden when off', await waitFor(`document.getElementById('remote-hint').hidden`));
 } catch (e) {
   console.log('ERROR', e.message);
   results.push([false, 'exception']);
 } finally {
   chrome.kill();
+  remote.kill();
   server.close();
+  rmSync(STATE, { recursive: true, force: true });
   setTimeout(() => rmSync(PROFILE, { recursive: true, force: true }), 500);
   const failed = results.filter((r) => !r[0]).length;
   console.log(`\n${results.length - failed}/${results.length} passed`);

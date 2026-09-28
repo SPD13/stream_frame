@@ -1,5 +1,5 @@
-// Stream Frame start page: tile grid, Configuration (Tiles + Controls tabs),
-// gamepad/keyboard navigation and the Widevine self-check.
+// Stream Frame start page: tile grid, Configuration (Tiles, Controls and Server tabs),
+// gamepad/keyboard navigation, the send-from-phone address and the Widevine self-check.
 (async function () {
   'use strict';
   const SF = globalThis.StreamFrame;
@@ -19,7 +19,7 @@
   }
 
   const defaults = await fetch('services.json').then((r) => r.json());
-  let { tiles: tileCfg, controls } = await SF.loadSettings();
+  let { tiles: tileCfg, controls, server } = await SF.loadSettings();
 
   const grid = $('#grid');
   const dialog = $('#config');
@@ -123,8 +123,9 @@
   // Configuration dialog + tabs
   // ============================================================
 
-  const tabs = { tiles: $('#tab-tiles'), controls: $('#tab-controls') };
-  const panels = { tiles: $('#panel-tiles'), controls: $('#panel-controls') };
+  const tabs = { tiles: $('#tab-tiles'), controls: $('#tab-controls'), server: $('#tab-server') };
+  const panels = { tiles: $('#panel-tiles'), controls: $('#panel-controls'), server: $('#panel-server') };
+  const tabNames = Object.keys(tabs);
 
   function selectTab(name, focus) {
     for (const k of Object.keys(tabs)) {
@@ -136,11 +137,12 @@
     if (name !== 'controls') cancelCapture();
     if (focus) tabs[name].focus();
   }
-  tabs.tiles.addEventListener('click', () => selectTab('tiles'));
-  tabs.controls.addEventListener('click', () => selectTab('controls'));
+  for (const k of tabNames) tabs[k].addEventListener('click', () => selectTab(k));
   $('.tabs').addEventListener('keydown', (e) => {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      selectTab(tabs.tiles.getAttribute('aria-selected') === 'true' ? 'controls' : 'tiles', true);
+      const cur = tabNames.findIndex((k) => tabs[k].getAttribute('aria-selected') === 'true');
+      const step = e.key === 'ArrowRight' ? 1 : -1;
+      selectTab(tabNames[(cur + step + tabNames.length) % tabNames.length], true);
       e.preventDefault();
     }
   });
@@ -149,6 +151,7 @@
     renderTileList();
     renderBindings();
     renderOptions();
+    renderServer();
     resetForm();
     dialog.showModal();
   }
@@ -535,6 +538,115 @@
       captureNote.textContent = 'Controls reset to defaults.';
     })
   );
+
+  // ============================================================
+  // Server tab + start page address (send links from a phone)
+  // ============================================================
+
+  let serverStatus = null; // published by background.js; null until it has connected once
+  const sEnabled = $('#s-enabled');
+  const sPort = $('#s-port');
+  const sPortError = $('#s-port-error');
+  const sCodeEnabled = $('#s-code-enabled');
+
+  function saveServer() {
+    SF.saveServer(server);
+    renderServer();
+  }
+
+  // What the server is doing, in words. The status lags a settings change by a moment.
+  function serverState() {
+    const st = serverStatus;
+    if (!st || !st.running) return { text: 'Server not running. Relaunch Stream Frame.', url: null };
+    if (!server.enabled) return { text: 'Off. Phones cannot send links.', url: null };
+    if (st.enabled !== server.enabled || st.port !== server.port || st.codeEnabled !== server.codeEnabled)
+      return { text: 'Restarting…', url: null };
+    if (st.error) return { text: st.error, url: null };
+    if (st.listening && st.url) return { text: 'Running at ', url: st.url };
+    return { text: 'Starting…', url: null };
+  }
+
+  function renderServer() {
+    sEnabled.checked = server.enabled;
+    if (document.activeElement !== sPort) sPort.value = server.port;
+    sCodeEnabled.checked = server.codeEnabled;
+    $('#s-code-box').hidden = !server.codeEnabled;
+    $('#s-code').textContent = server.code;
+    const state = serverState();
+    const status = $('#s-status');
+    status.replaceChildren(state.text, state.url ? h('strong', { text: state.url }) : '');
+    status.className = state.url ? 'ok' : serverStatus?.error && server.enabled ? 'bad' : '';
+    const alt = serverStatus?.hostnameUrl;
+    $('#s-alt').textContent = state.url && alt ? `(may also work: ${alt})` : '';
+    if (serverStatus?.codeLocked) {
+      $('#s-alt').textContent = 'Code entry is blocked after too many wrong codes. Press New code to unblock it.';
+    }
+    renderRemoteHint(state);
+  }
+
+  function renderRemoteHint(state = serverState()) {
+    const hint = $('#remote-hint');
+    hint.hidden = !state.url;
+    if (!state.url) return;
+    hint.replaceChildren(
+      'Send links from your phone: ',
+      h('strong', { text: state.url.replace(/\/$/, '') }),
+      ...(server.codeEnabled ? [' · code ', h('strong', { class: 'code', text: server.code })] : [])
+    );
+  }
+
+  sEnabled.addEventListener('change', () => {
+    server.enabled = sEnabled.checked;
+    saveServer();
+  });
+
+  $('#s-port-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const port = Number(sPort.value);
+    if (!SF.validServerPort(port)) {
+      sPortError.textContent =
+        port === SF.CONTROL_PORT
+          ? `Port ${SF.CONTROL_PORT} is reserved for Stream Frame itself.`
+          : 'Enter a port between 1024 and 65535.';
+      sPort.focus();
+      return;
+    }
+    sPortError.textContent = '';
+    server.port = port;
+    saveServer();
+  });
+
+  sCodeEnabled.addEventListener('change', () => {
+    server.codeEnabled = sCodeEnabled.checked;
+    if (server.codeEnabled && !server.code) server.code = SF.newServerCode();
+    saveServer();
+  });
+
+  $('#s-new-code').addEventListener('click', () => {
+    let code;
+    do code = SF.newServerCode();
+    while (code === server.code);
+    server.code = code;
+    saveServer();
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'session' && changes.serverStatus) {
+      serverStatus = changes.serverStatus.newValue || null;
+      renderServer();
+    } else if (area === 'local' && changes.server) {
+      server = SF.normalizeServer(changes.server.newValue);
+      renderServer();
+    }
+  });
+  chrome.storage.session
+    .get('serverStatus')
+    .then((s) => {
+      serverStatus = s.serverStatus || null;
+      renderServer();
+    })
+    .catch(() => {});
+  chrome.runtime.sendMessage({ type: 'sf-wake' }).catch(() => {});
 
   // ---------- live input indicator ----------
 
