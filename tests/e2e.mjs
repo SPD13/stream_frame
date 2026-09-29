@@ -3,6 +3,8 @@
 // keyboard mapper / Home overlay on a local player page, and send-from-phone (lib/remote.py
 // with its Server tab). Gamepad input is not simulated. Needs python3 for lib/remote.py.
 // Uses ports 8765/8766 (phone page), 8790 (test site) and 47800 (remote.py control).
+// Close any other Chrome that has the extension loaded, and stop any lib/remote.py you started:
+// their copy of the extension would connect to the test's server and receive its links.
 //
 //   npx @puppeteer/browsers install chrome@stable      # prints the binary path
 //   CHROME=/path/to/chrome-for-testing node tests/e2e.mjs

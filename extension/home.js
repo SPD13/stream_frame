@@ -576,8 +576,8 @@
     const status = $('#s-status');
     status.replaceChildren(state.text, state.url ? h('strong', { text: state.url }) : '');
     status.className = state.url ? 'ok' : serverStatus?.error && server.enabled ? 'bad' : '';
-    const alt = serverStatus?.hostnameUrl;
-    $('#s-alt').textContent = state.url && alt ? `(may also work: ${alt})` : '';
+    const others = serverStatus?.otherUrls || [];
+    $('#s-alt').textContent = state.url && others.length ? `If the phone cannot connect, try: ${others.join(' · ')}` : '';
     if (serverStatus?.codeLocked) {
       $('#s-alt').textContent = 'Code entry is blocked after too many wrong codes. Press New code to unblock it.';
     }

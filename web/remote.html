@@ -14,10 +14,13 @@
     .lead { margin: 0 0 22px; color: var(--muted); }
     form { display: flex; flex-direction: column; gap: 14px; }
     label { font-weight: 600; }
-    textarea, input { width: 100%; font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
-    textarea { min-height: 150px; resize: vertical; }
+    .box, input { width: 100%; font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+    .box { min-height: 150px; max-height: 50vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+    .box:empty::before { content: attr(data-placeholder); color: var(--muted); pointer-events: none; }
+    .box * { color: inherit !important; background: none !important; font: inherit !important; }
+    .box img { display: none; }
     input.code { font-size: 32px; letter-spacing: .35em; text-align: center; font-variant-numeric: tabular-nums; }
-    textarea:focus, input:focus { outline: 3px solid var(--accent); outline-offset: 1px; }
+    .box:focus, input:focus { outline: 3px solid var(--accent); outline-offset: 1px; }
     button { font: inherit; font-weight: 700; font-size: 19px; color: #fff; background: var(--primary); border: 0; border-radius: 14px; padding: 16px; cursor: pointer; }
     button:disabled { opacity: .5; }
     .status { min-height: 1.5em; margin: 18px 0 0; font-weight: 600; }
@@ -26,6 +29,7 @@
     .status.wait { color: var(--accent); }
     .help { margin-top: 28px; color: var(--muted); font-size: 15px; }
     .help ol { padding-left: 20px; margin: 8px 0; }
+    .debug { margin-top: 20px; padding: 12px; border-radius: 10px; background: var(--panel); font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -42,12 +46,16 @@
     </form>
 
     <form id="send-form" hidden>
-      <label for="text">Link from the app's Share button</label>
-      <textarea id="text" placeholder="Paste the link or the whole shared message here" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+      <label id="text-label">Link from the app's Share button</label>
+      <!-- A rich-text box, not a <textarea>: iOS pastes only the text item of a shared
+           "link + message" into a plain field, but every item into a rich one (as in Mail). -->
+      <div id="text" class="box" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="text-label"
+        data-placeholder="Paste the link or the whole shared message here" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
       <button type="submit" id="send">Send to headset</button>
     </form>
 
     <p id="status" class="status" role="status" aria-live="polite"></p>
+    <pre id="debug" class="debug" hidden></pre>
 
     <div class="help" id="help" hidden>
       <ol>
@@ -63,6 +71,20 @@
     const statusEl = $('status');
     const codeForm = $('code-form');
     const sendForm = $('send-form');
+    const box = $('text');
+    const debug = new URLSearchParams(location.search).has('debug');
+    const URL_RE = /https?:\/\/[^\s<>"'`]+/gi;
+    const trimUrl = (u) => u.replace(/[.,;:!?)\]}]+$/, '');
+
+    // What was pasted: the visible text, plus links that only exist as link elements
+    // (a pasted URL item can arrive as <a href> with the page title as its text).
+    function boxText() {
+      const text = box.innerText.trim();
+      const hrefs = [...box.querySelectorAll('a[href]')]
+        .map((a) => a.href)
+        .filter((u) => /^https?:/i.test(u) && !text.includes(u));
+      return [...new Set(hrefs), text].filter(Boolean).join('\n');
+    }
 
     function say(text, kind) {
       statusEl.textContent = text;
@@ -92,7 +114,7 @@
       expired: () => ['Not confirmed on the headset in time.', 'bad'],
       not_connected: () => ['The headset is not ready. Is Stream Frame open?', 'bad'],
       no_answer: () => ['The headset did not answer. Is Stream Frame open?', 'bad'],
-      no_link: () => ['No link found. Paste the text from the app\'s Share button.', 'bad'],
+      no_link: () => ['No link found. In the app, tap Share and choose Copy Link (or Copy), then paste again.', 'bad'],
       unsupported: () => ['That link is not from a supported streaming service.', 'bad'],
       rate_limited: () => ['Too many links at once. Wait a few seconds.', 'bad'],
       wrong: () => ['Wrong code.', 'bad'],
@@ -101,6 +123,32 @@
       offline: () => ['Cannot reach the headset. Is Stream Frame open, and is this phone on the same Wi-Fi?', 'bad'],
     };
     const describe = (r) => (MESSAGES[r.status] || (() => ['Something went wrong.', 'bad']))(r.service);
+
+    // Share sheets put the link and the message on the clipboard as separate items. If the
+    // paste event exposes a link the plain text lacks, insert link + text ourselves; otherwise
+    // let the browser paste (rich), which on iOS includes every item.
+    box.addEventListener('paste', (e) => {
+      const cd = e.clipboardData;
+      if (!cd) return;
+      const plain = cd.getData('text/plain') || '';
+      const links = [];
+      for (const type of cd.types) {
+        if (type === 'Files') continue;
+        for (const m of (cd.getData(type) || '').matchAll(URL_RE)) {
+          const url = trimUrl(m[0]);
+          if (!plain.includes(url) && !links.includes(url)) links.push(url);
+        }
+      }
+      if (debug) {
+        $('debug').hidden = false;
+        $('debug').textContent = 'paste event formats:\n' +
+          [...cd.types].map((t) => `${t}: ${JSON.stringify((cd.getData(t) || '').slice(0, 300))}`).join('\n');
+        setTimeout(() => ($('debug').textContent += '\n\nbox HTML after paste:\n' + box.innerHTML.slice(0, 1500)), 50);
+      }
+      if (!links.length) return; // the browser's own (rich) paste
+      e.preventDefault();
+      document.execCommand('insertText', false, [...links, plain].filter(Boolean).join('\n'));
+    });
 
     codeForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -131,12 +179,12 @@
 
     function finish(r) {
       say(...describe(r));
-      if (r.status === 'opened') $('text').value = '';
+      if (r.status === 'opened') box.textContent = '';
     }
 
     sendForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const text = $('text').value;
+      const text = boxText();
       if (!text.trim()) return say(...MESSAGES.no_link());
       $('send').disabled = true;
       say('Sending…', 'wait');

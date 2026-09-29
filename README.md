@@ -352,8 +352,14 @@ including your own custom tiles, are refused. The allowed domains are the `hosts
 
 Every change restarts the server with the new settings at once. The status line reads *Running
 at http://…* when it is ready, *Off*, or the reason it cannot run (for example *Port 8765 is
-already in use*, or *Server not running* if Stream Frame was started without it). It may also
-suggest a `http://<name>.local:8765` address, which some phones resolve and others do not.
+already in use*, or *Server not running* if Stream Frame was started without it).
+
+The address shown is the headset's best guess at its address on your Wi-Fi. The guess skips
+addresses a phone cannot use: VPN tunnels (Tailscale, WireGuard…), container and virtual-machine
+networks, and loopback. It prefers home-network ranges (`192.168.x.x`, then `10.x.x.x`, then
+`172.16–31.x.x`) on the Wi-Fi or Ethernet interface. When the machine has several candidate
+addresses, the Server tab lists the others under *If the phone cannot connect, try*, along with
+a `http://<name>.local:8765` address, which some phones resolve and others do not.
 
 ### Share-sheet shortcut (skip the copy and paste)
 
@@ -395,7 +401,7 @@ the headset), `not_connected`, `unsupported`, `no_link`, `code_required`, `wrong
 | Controller buttons do nothing | Open the gear icon → Controls: the *Receiving* strip shows whether any input reaches the page. Change the shortcut's controller layout in Steam (gamepad or keyboard/mouse). |
 | Headset screenshot for a bug report | From the build machine: `tools/frame-shot.sh steamos@<frame-ip>`. |
 | No address on the start page | Open the gear icon → Server. *Server not running*: relaunch Stream Frame, check `REMOTE_SERVER` in `config.env`, and read `launcher.log` (lines start with `remote:`). *No network connection*: connect the headset to Wi-Fi. |
-| The phone cannot open the address | The phone must be on the same network, not a guest network, and the router must not isolate devices from each other ("AP/client isolation"). Try the other address the Server tab suggests. |
+| The phone cannot open the address | The phone must be on the same network, not a guest network, and the router must not isolate devices from each other ("AP/client isolation"). Try the other addresses the Server tab lists. |
 | *Port … is already in use* | Another program uses that port: choose another one in Configuration › Server. |
 | The phone says *The headset is not ready* | Stream Frame is closed, or still starting: wait a few seconds and send again. |
 
@@ -467,6 +473,9 @@ Configuration (tiles and controls), persistence, the keyboard mapper on a local 
 fullscreen, typing protection, the Home confirmation and button, and send-from-phone (the Server
 tab, port changes, the confirmation code, opening a link, and the prompt while a video plays): 61
 checks. It runs `lib/remote.py`, so it needs `python3` and the ports 8765, 8766, 8790 and 47800.
+Before running it, quit any other Chrome that has the extension loaded (such as your development
+profile) and stop any `lib/remote.py` you started by hand. Otherwise that copy of the extension
+connects to the test's server and receives the test's links, and the send-from-phone checks fail.
 
 ```sh
 npx @puppeteer/browsers install chrome@stable            # prints the Chrome for Testing path

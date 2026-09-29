@@ -25,6 +25,7 @@ import re
 import secrets
 import socket
 import struct
+import subprocess
 import sys
 import threading
 import time
@@ -114,17 +115,85 @@ def find_link(text, allow):
     return (urls[0] if urls else None), None
 
 
-def lan_ip():
-    """This machine's address on the local network (connecting a UDP socket sends nothing)."""
+# ------------------------------------------------------------------ local network address
+
+# Interfaces a phone on the Wi-Fi cannot reach us through: loopback, VPN tunnels, container and
+# VM bridges, and macOS helper interfaces.
+VIRTUAL_IFACES = re.compile(
+    r"^(lo|utun|tun|tap|wg|tailscale|zt|ppp|ipsec|gif|stf|awdl|llw|anpi|bridge|docker|br-|veth|virbr|"
+    r"vmnet|vboxnet|podman|cni|flannel|cali|lxc|lxd|incus)", re.I)
+PHYSICAL_IFACES = re.compile(r"^(wl|en|eth)", re.I)  # Wi-Fi and Ethernet on Linux and macOS
+PRIVATE_RANK = [ipaddress.ip_network(n) for n in ("192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12")]
+
+
+def parse_ip_addr(text):
+    """(interface, address) pairs from Linux `ip -4 -o addr show`."""
+    return [(m[1], m[2]) for m in re.finditer(r"^\d+:\s+([^\s:@]+)\S*\s+inet\s+([\d.]+)/", text, re.M)]
+
+
+def parse_ifconfig(text):
+    """(interface, address) pairs from macOS or Linux `ifconfig`."""
+    out, iface = [], None
+    for line in text.splitlines():
+        head = re.match(r"^([^\s:]+):?\s", line)
+        if head and not line[0].isspace():
+            iface = head.group(1)
+        m = re.search(r"\binet (?:addr:)?([\d.]+)", line)
+        if iface and m:
+            out.append((iface, m.group(1)))
+    return out
+
+
+def route_ip():
+    """The address of the interface carrying the default route (connecting a UDP socket sends nothing)."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("192.0.2.1", 9))
-        ip = s.getsockname()[0]
-        return None if ip.startswith("127.") or ip == "0.0.0.0" else ip
+        return s.getsockname()[0]
     except OSError:
         return None
     finally:
         s.close()
+
+
+def interface_addresses():
+    for cmd, parse in ((["ip", "-4", "-o", "addr", "show"], parse_ip_addr), (["ifconfig"], parse_ifconfig)):
+        try:
+            text = subprocess.run(cmd, capture_output=True, text=True, timeout=3, check=True).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        pairs = parse(text)
+        if pairs:
+            return pairs
+    return []
+
+
+def rank_addresses(pairs, default_ip=None):
+    """Addresses a phone on the same Wi-Fi can probably reach, best first. Skips loopback, VPN and
+    container interfaces, link-local and carrier-grade NAT addresses; prefers 192.168, then 10, then
+    172.16-31 ranges, Wi-Fi/Ethernet interfaces, and the interface of the default route."""
+    ranked = {}
+    for iface, ip in pairs:
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        if (VIRTUAL_IFACES.match(iface) or addr.is_loopback or addr.is_link_local or addr.is_unspecified
+                or addr.is_multicast or addr in ipaddress.ip_network("100.64.0.0/10")):
+            continue
+        rng = next((i for i, n in enumerate(PRIVATE_RANK) if addr in n), len(PRIVATE_RANK))
+        key = (rng, not PHYSICAL_IFACES.match(iface), ip != default_ip, iface)
+        ranked[ip] = min(key, ranked.get(ip, key))
+    return sorted(ranked, key=ranked.get)
+
+
+def lan_ips():
+    """This machine's addresses on the local network, best guess first."""
+    pairs = interface_addresses()
+    default_ip = route_ip()
+    if not pairs and default_ip:  # no ip/ifconfig: fall back to the default route's address
+        pairs = [("default", default_ip)]
+    return rank_addresses(pairs, default_ip)
 
 
 def sha(token):
@@ -302,18 +371,22 @@ class Hub:
         with self.lock:
             s = self.settings
             listening = self.phone is not None
-            ip = lan_ip() if listening else None
+            ips = lan_ips() if listening else []
             error = self.error
-            if listening and not ip:
+            if listening and not ips:
                 error = "No network connection. Connect the headset to Wi-Fi."
             host = socket.gethostname().split(".")[0]
+            port = s["port"]
+            others = [f"http://{ip}:{port}/" for ip in ips[1:]]
+            if listening and ips and host:
+                others.append(f"http://{host}.local:{port}/")
             return {
                 "enabled": s["enabled"],
-                "port": s["port"],
+                "port": port,
                 "codeEnabled": s["codeEnabled"],
                 "listening": listening,
-                "url": f"http://{ip}:{s['port']}/" if listening and ip else None,
-                "hostnameUrl": f"http://{host}.local:{s['port']}/" if listening and host else None,
+                "url": f"http://{ips[0]}:{port}/" if ips else None,
+                "otherUrls": others,
                 "error": error,
                 "codeLocked": s["codeEnabled"] and self.global_fails >= GLOBAL_FAILS,
             }

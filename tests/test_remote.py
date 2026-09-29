@@ -81,6 +81,76 @@ class Links(unittest.TestCase):
         self.assertTrue(n({"codeEnabled": True, "code": "123456"})["codeEnabled"])
 
 
+IP_ADDR = """\
+1: lo    inet 127.0.0.1/8 scope host lo\       valid_lft forever preferred_lft forever
+3: wlan0    inet 192.168.1.23/24 brd 192.168.1.255 scope global dynamic noprefixroute wlan0\       valid_lft 85000sec
+4: tailscale0    inet 100.101.102.103/32 scope global tailscale0\       valid_lft forever preferred_lft forever
+5: docker0    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0\       valid_lft forever preferred_lft forever
+6: wg0    inet 10.5.0.2/32 scope global wg0\       valid_lft forever preferred_lft forever
+7: veth12ab@if6    inet 172.18.0.1/16 scope global veth12ab\       valid_lft forever preferred_lft forever
+"""
+
+IFCONFIG_MAC = """\
+lo0: flags=8049<UP,LOOPBACK,RUNNING,MULTICAST> mtu 16384
+\tinet 127.0.0.1 netmask 0xff000000
+en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tether de:55:7f:e3:25:48
+\tinet6 fe80::1c2a:1234:abcd:1%en0 prefixlen 64 secured scopeid 0xb
+\tinet 192.168.4.107 netmask 0xffffff00 broadcast 192.168.4.255
+utun8: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1420
+\tinet 10.5.0.2 --> 10.5.0.2 netmask 0xffff0000
+bridge100: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tinet 192.168.2.1 netmask 0xffffff00 broadcast 192.168.2.255
+"""
+
+IFCONFIG_LINUX_OLD = """\
+eth0      Link encap:Ethernet  HWaddr 00:11:22:33:44:55
+          inet addr:10.0.0.7  Bcast:10.0.0.255  Mask:255.255.255.0
+lo        Link encap:Local Loopback
+          inet addr:127.0.0.1  Mask:255.0.0.0
+"""
+
+
+class Addresses(unittest.TestCase):
+    def test_parse_ip_addr(self):
+        self.assertEqual(remote.parse_ip_addr(IP_ADDR), [
+            ("lo", "127.0.0.1"), ("wlan0", "192.168.1.23"), ("tailscale0", "100.101.102.103"),
+            ("docker0", "172.17.0.1"), ("wg0", "10.5.0.2"), ("veth12ab", "172.18.0.1"),
+        ])
+
+    def test_parse_ifconfig(self):
+        self.assertEqual(remote.parse_ifconfig(IFCONFIG_MAC), [
+            ("lo0", "127.0.0.1"), ("en0", "192.168.4.107"), ("utun8", "10.5.0.2"), ("bridge100", "192.168.2.1"),
+        ])
+        self.assertEqual(remote.parse_ifconfig(IFCONFIG_LINUX_OLD), [("eth0", "10.0.0.7"), ("lo", "127.0.0.1")])
+
+    def test_vpn_default_route_is_skipped(self):
+        # the Mac on a VPN: the default route goes through utun8, the phone needs en0
+        self.assertEqual(remote.rank_addresses(remote.parse_ifconfig(IFCONFIG_MAC), "10.5.0.2"), ["192.168.4.107"])
+        self.assertEqual(remote.rank_addresses(remote.parse_ip_addr(IP_ADDR), "10.5.0.2"), ["192.168.1.23"])
+
+    def test_ranking(self):
+        pairs = [("eth0", "10.0.0.7"), ("wlan0", "192.168.1.23"), ("usb0", "192.168.42.10"),
+                 ("wlan0", "169.254.3.4"), ("enp3s0", "172.20.0.5")]
+        self.assertEqual(remote.rank_addresses(pairs), ["192.168.1.23", "192.168.42.10", "10.0.0.7", "172.20.0.5"])
+        # the default route breaks ties between equally good addresses
+        two = [("wlan0", "192.168.1.23"), ("eth0", "192.168.0.9")]
+        self.assertEqual(remote.rank_addresses(two, "192.168.0.9")[0], "192.168.0.9")
+
+    def test_status_lists_other_addresses(self):
+        hub = remote.Hub(remote.Allowlist(SERVICES), EXT_ID, None)
+        hub.phone = object()  # pretend the phone listener is up
+        orig = remote.lan_ips
+        remote.lan_ips = lambda: ["192.168.1.23", "10.0.0.7"]
+        try:
+            st = hub.status()
+        finally:
+            remote.lan_ips = orig
+        self.assertEqual(st["url"], "http://192.168.1.23:8765/")
+        self.assertEqual(st["otherUrls"][0], "http://10.0.0.7:8765/")
+        self.assertTrue(st["otherUrls"][-1].endswith(".local:8765/"))
+
+
 class Server(unittest.TestCase):
     """Runs a real hub with both listeners on 127.0.0.1 and a fake extension on the WebSocket."""
 
