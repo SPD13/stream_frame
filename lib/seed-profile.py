@@ -5,10 +5,10 @@
       Print the extension id derived from manifest.json's "key".
 
   seed-profile.py seed --profile DIR --seed-dir DIR --services FILE --home-url URL
-                       [--helper-crx PATH --helper-version V --helper-id ID]
+                       [--ext-dir DIR] [--helper-crx PATH --helper-version V --helper-id ID]
                        [--no-netflix-1080p]
       Merge our Preferences, create Bookmarks on first run only, and (re)write the
-      External Extensions entries. Chrome must not be running on this profile.
+      extension registrations in --ext-dir. Chrome must not be running on this profile.
 """
 import argparse
 import base64
@@ -95,9 +95,15 @@ def seed(args):
         write_json(bm_path, bm)
         notes.append(f"bookmarks seeded ({len(entries)})")
 
-    # External Extensions live in the user-data-dir root on Linux and macOS.
-    ext_dir = profile / "External Extensions"
+    # Extension registrations (<id>.json). Chrome on Linux reads them from <chrome dir>/extensions
+    # (--ext-dir), not from the profile; macOS reads <profile>/External Extensions, the default.
+    legacy = profile / "External Extensions"
+    ext_dir = Path(args.ext_dir).expanduser() if args.ext_dir else legacy
     ext_dir.mkdir(parents=True, exist_ok=True)
+    if ext_dir != legacy:  # drop registrations an older install left in the profile
+        for i in (NETFLIX_1080P_ID, args.helper_id):
+            if i and (legacy / f"{i}.json").exists():
+                (legacy / f"{i}.json").unlink()
     nf = ext_dir / f"{NETFLIX_1080P_ID}.json"
     if args.netflix_1080p:
         write_json(nf, json.loads((seed_dir / "external-extensions" / f"{NETFLIX_1080P_ID}.json").read_text()))
@@ -126,6 +132,7 @@ def main():
     ps.add_argument("--seed-dir", required=True)
     ps.add_argument("--services", required=True)
     ps.add_argument("--home-url", required=True)
+    ps.add_argument("--ext-dir", help="where Chrome reads extension registrations")
     ps.add_argument("--helper-crx")
     ps.add_argument("--helper-version")
     ps.add_argument("--helper-id")

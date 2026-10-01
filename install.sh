@@ -3,7 +3,8 @@
 #
 #   ./install.sh [options]
 #
-#   --backend=flatpak|deb     force a Chrome backend (default: Flatpak, .deb as fallback)
+#   --backend=flatpak|deb     force a Chrome backend (default: Google's .deb, Flatpak as fallback)
+#   --update-chrome           download the latest Chrome even if one is installed
 #   --no-shortcut             do not add the Steam library shortcut
 #   --no-netflix-1080p        do not register the "New Netflix 1080p" Web Store extension
 #   --enable-cef-debugging    if Steam's DevTools port is closed, enable it (needs a Steam restart)
@@ -21,16 +22,17 @@ SF_STATE=${XDG_STATE_HOME:-$HOME/.local/state}/stream-frame
 SHORTCUT_NAME="Stream Frame"
 export SF_DATA
 
-dry_run=0 backend=auto shortcut=1 netflix=1 force=0 enable_cef=0
+dry_run=0 backend=auto shortcut=1 netflix=1 force=0 enable_cef=0 update_chrome=0
 for arg in "$@"; do
   case $arg in
     --backend=*) backend=${arg#*=} ;;
     --no-shortcut) shortcut=0 ;;
+    --update-chrome) update_chrome=1 ;;
     --no-netflix-1080p) netflix=0 ;;
     --enable-cef-debugging) enable_cef=1 ;;
     --dry-run) dry_run=1 ;;
     --force) force=1 ;;
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "install.sh: unknown option $arg" >&2; exit 2 ;;
   esac
 done
@@ -65,13 +67,21 @@ fi
 # ------------------------------------------------------------------ Chrome
 step "Google Chrome (Widevine-capable browser)"
 current=$(CHROME_BACKEND=$backend sf_detect_backend)
-if [[ $current == none ]]; then
+if (( update_chrome )) && [[ $current == flatpak ]]; then
+  note "updating the Chrome Flatpak"
+  run flatpak update --user -y --noninteractive "$SF_FLATPAK_ID" || warn "Flatpak update failed; keeping the installed Chrome"
+elif (( update_chrome )) || [[ $current == none ]] || [[ $backend == auto && $current != deb ]]; then
+  # auto wants the .deb even when the Flatpak is there: only the .deb can install our extensions.
   note "installing Chrome (backend: $backend)"
-  run sf_install_chrome "$backend" || die "Chrome installation failed; see docs/spikes/S1.md and try --backend=deb"
+  if ! run sf_install_chrome "$backend"; then
+    [[ $current == none ]] && die "Chrome installation failed; see docs/spikes/S1.md"
+    warn "Chrome download failed; keeping the installed $current Chrome"
+  fi
   (( dry_run )) || current=$(CHROME_BACKEND=$backend sf_detect_backend)
 else
   note "already installed: $current"
 fi
+(( dry_run )) && [[ $current == none ]] && current=$([[ $backend == flatpak ]] && echo flatpak || echo deb)
 if [[ $current == flatpak ]]; then
   note "granting the Flatpak access to $SF_DATA"
   run sf_flatpak_grant
@@ -126,6 +136,13 @@ seed_args=(seed --profile "$profile" --seed-dir "$SF_DATA/lib/profile-seed"
   --services "$SF_DATA/extension/services.json" --home-url "chrome-extension://$ext_id/home.html")
 [[ -n $crx ]] && seed_args+=(--helper-crx "$SF_DATA/dist/stream-frame-helper.crx" --helper-version "$ext_version" --helper-id "$ext_id")
 (( netflix )) || seed_args+=(--no-netflix-1080p)
+if [[ $current == deb ]]; then
+  seed_args+=(--ext-dir "$SF_DEB_EXT_DIR")
+else
+  warn "the Flatpak Chrome cannot install extensions for Stream Frame by itself. After the first"
+  warn "launch, open chrome://extensions, turn on Developer mode, choose Load unpacked and pick"
+  warn "$SF_DATA/extension. Or re-run without --backend=flatpak to use Google's .deb Chrome."
+fi
 run python3 "$SF_DATA/lib/seed-profile.py" "${seed_args[@]}"
 
 # ------------------------------------------------------------------ config

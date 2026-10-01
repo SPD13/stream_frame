@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
-# Chrome backend for Stream Frame: Flathub com.google.Chrome (preferred) or Google's
-# arm64 .deb extracted into ~/.local/share/stream-frame/chrome (fallback when the
-# Flatpak cannot reach gamescope's X display).
+# Chrome backend for Stream Frame: Google's arm64 .deb extracted into
+# ~/.local/share/stream-frame/chrome (preferred), or Flathub com.google.Chrome (fallback).
+# The .deb comes first because Chrome installs extensions registered in its own
+# <chrome dir>/extensions folder, which is ours to write for the .deb but read-only in the
+# Flatpak; Chrome on Linux ignores the profile's "External Extensions" folder.
 #
 # Source it for the functions, or run it:
 #   chrome-backend.sh detect            print flatpak | deb | none
 #   chrome-backend.sh install [flatpak|deb]
 #   chrome-backend.sh cmd               print the command Stream Frame execs, one word per line
 #
-# CHROME_BACKEND=auto|flatpak|deb selects the backend (auto: flatpak if installed, else deb).
+# CHROME_BACKEND=auto|flatpak|deb selects the backend (auto: deb if installed, else flatpak).
 
 SF_DATA=${SF_DATA:-$HOME/.local/share/stream-frame}
 SF_FLATPAK_ID=com.google.Chrome
 SF_DEB_URL=${SF_DEB_URL:-https://dl.google.com/linux/direct/google-chrome-stable_current_arm64.deb}
 SF_DEB_BIN=$SF_DATA/chrome/opt/google/chrome/chrome
+# shellcheck disable=SC2034  # used by install.sh
+SF_DEB_EXT_DIR=$SF_DATA/chrome/opt/google/chrome/extensions  # extension registrations (*.json)
 
 sf_have_flatpak_chrome() {
   command -v flatpak >/dev/null 2>&1 || return 1
@@ -29,8 +33,8 @@ sf_detect_backend() {
     flatpak) sf_have_flatpak_chrome && echo flatpak || echo none ;;
     deb) sf_have_deb_chrome && echo deb || echo none ;;
     *)
-      if sf_have_flatpak_chrome; then echo flatpak
-      elif sf_have_deb_chrome; then echo deb
+      if sf_have_deb_chrome; then echo deb
+      elif sf_have_flatpak_chrome; then echo flatpak
       else echo none
       fi ;;
   esac
@@ -108,7 +112,7 @@ sf_install_chrome() {
   case $want in
     flatpak) sf_install_flatpak ;;
     deb) sf_install_deb ;;
-    *) sf_install_flatpak || { echo "chrome-backend: Flatpak install failed, falling back to the .deb" >&2; sf_install_deb; } ;;
+    *) sf_install_deb || { echo "chrome-backend: .deb install failed, falling back to the Flatpak" >&2; sf_install_flatpak; } ;;
   esac
 }
 

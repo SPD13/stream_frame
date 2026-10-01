@@ -57,7 +57,7 @@ plug in the charger for a film.
 **Steam Frame** (SteamOS 0.3.0 or later):
 
 - Developer Mode enabled, for SSH access.
-- Internet access (the installer downloads Google Chrome from Flathub or Google).
+- Internet access (the installer downloads Google Chrome from Google, or Flathub as a fallback).
 - About 1 GB free in `/home` for Chrome and the profile. Nothing is written to the read-only `/`.
 
 **Build machine** (macOS or Linux), from which you build the helper extension and copy the
@@ -197,15 +197,19 @@ cd stream_frame
 
 No sudo is needed. The installer:
 
-1. **Installs Google Chrome**, from Flathub (`com.google.Chrome`, as a `--user` install), or from
-   Google's arm64 `.deb` extracted into `~/.local/share/stream-frame/chrome` if Flatpak fails.
-   It grants the Flatpak access to `~/.local/share/stream-frame`.
+1. **Installs Google Chrome**: Google's arm64 `.deb`, extracted into
+   `~/.local/share/stream-frame/chrome` (no package manager, no root). If that download fails, it
+   installs the Flathub Flatpak (`com.google.Chrome`, as a `--user` install) instead. The `.deb`
+   comes first because only it lets the installer install the extensions: Chrome on Linux
+   installs extensions registered in its own program folder, which is read-only in the Flatpak,
+   and ignores the profile's `External Extensions` folder (confirmed on the Frame). An existing
+   Flatpak Chrome is left in place and no longer used.
 2. **Copies Stream Frame** to `~/.local/share/stream-frame` (launcher, libraries, extension, boot
    page, icon, and the extension package into `dist/`).
 3. **Seeds a dedicated Chrome profile** at `~/.local/share/stream-frame/profile`: no first-run
-   screens, password saving off, bookmarks for the services, and two extensions registered to
-   install on first launch: the Stream Frame Helper (from the local `.crx`) and *New Netflix
-   1080p* (from the Chrome Web Store).
+   screens, password saving off, bookmarks for the services. It registers two extensions in
+   Chrome's `extensions` folder, which Chrome installs silently on first launch: the Stream Frame
+   Helper (from the local `.crx`) and *New Netflix 1080p* (from the Chrome Web Store).
 4. **Creates the settings file** `~/.config/stream-frame/config.env` if there is none.
 5. **Adds a desktop entry** (`~/.local/share/applications/stream-frame.desktop`).
 6. **Adds the Stream Frame shortcut to the Steam library** through the Steam client's local
@@ -215,7 +219,8 @@ Installer options:
 
 | Option | Effect |
 |---|---|
-| `--backend=flatpak` / `--backend=deb` | force a Chrome backend (default: Flatpak, `.deb` as fallback) |
+| `--backend=deb` / `--backend=flatpak` | force a Chrome backend (default: `.deb`, Flatpak as fallback). With the Flatpak, load the helper extension by hand: `chrome://extensions` → *Developer mode* → *Load unpacked* → `~/.local/share/stream-frame/extension` |
+| `--update-chrome` | download the latest Chrome even if one is installed (the `.deb` Chrome does not update itself) |
 | `--no-shortcut` | do not add the Steam library shortcut |
 | `--no-netflix-1080p` | do not register the *New Netflix 1080p* extension |
 | `--enable-cef-debugging` | if Steam's DevTools port is closed, enable it (then restart Steam and re-run) |
@@ -242,7 +247,8 @@ mode → Steam → **Games → Add a Non-Steam Game to My Library → Browse** �
 
 **Update:** close Stream Frame, bump `"version"` in `extension/manifest.json` if the extension
 changed, then repeat [copy](#2-copy-the-project-to-the-frame) and `./install.sh`. Logins, tiles
-and button mappings are kept.
+and button mappings are kept. Chrome itself is not updated by a plain re-run: add `--update-chrome` to
+download the latest version (do this every few weeks for security fixes).
 
 **Uninstall** (on the Frame):
 
@@ -307,7 +313,7 @@ All three are saved in the profile (`chrome.storage.local`) and survive relaunch
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `CHROME_BACKEND` | `auto` | `flatpak`, `deb`, or `auto` (Flatpak if installed) |
+| `CHROME_BACKEND` | `auto` | `deb`, `flatpak`, or `auto` (the `.deb` if installed, else the Flatpak) |
 | `WINDOW_SIZE` | `1280,720` | Chrome window size; matches the default panel size |
 | `SCALE_FACTOR` | empty | UI scale, e.g. `1.25` for larger text |
 | `START_URL` | empty | start somewhere other than the start page |
@@ -394,7 +400,7 @@ the headset), `not_connected`, `unsupported`, `no_link`, `code_required`, `wrong
 | Symptom | What to do |
 |---|---|
 | Nothing happens when launching | Read `~/.local/state/stream-frame/launcher.log`. |
-| Chrome does not appear, or has no panel of its own | Re-install with `./install.sh --backend=deb` to use Google's own Chrome instead of the Flatpak. |
+| Chrome does not appear, or has no panel of its own | Read `launcher.log`. Try the other Chrome: `./install.sh --backend=flatpak` (then load the extension by hand, see the installer options), or back with `--backend=deb`. |
 | "Stream Frame Helper is not installed" | Re-run `./install.sh`. If Chrome showed a "New extension added" notice, choose *Enable*. Otherwise open `chrome://extensions`, turn on *Developer mode*, *Load unpacked* → `~/.local/share/stream-frame/extension`. |
 | Red "Widevine DRM is not available" banner | Chrome is missing or the DRM component is not loaded yet: open `chrome://components`, update *Widevine Content Decryption Module*, relaunch. Chromium does not work; it has no Widevine. |
 | Shortcut missing from the library | See [Run the installer](#3-run-the-installer) for `--enable-cef-debugging` or adding it by hand. |
@@ -512,9 +518,9 @@ Steam library shortcut "Stream Frame"
 |---|---|
 | `install.sh`, `uninstall.sh` | install / remove; `--dry-run` works anywhere |
 | `bin/stream-frame` | launcher; `--print-command` shows the Chrome command line |
-| `lib/chrome-backend.sh` | Flatpak / `.deb` detection and install |
+| `lib/chrome-backend.sh` | `.deb` / Flatpak detection and install |
 | `lib/steam-shortcut.py` | library shortcut through Steam's DevTools port (stdlib WebSocket client) |
-| `lib/seed-profile.py`, `lib/profile-seed/` | Preferences, Bookmarks, External Extensions |
+| `lib/seed-profile.py`, `lib/profile-seed/` | Preferences, Bookmarks, extension registrations |
 | `lib/tag-window.sh` | STEAM_GAME fallback for panel mapping |
 | `lib/config.env.example` | launcher settings template |
 | `lib/remote.py`, `web/remote.html` | send-from-phone server (stdlib only) and the page phones open |
