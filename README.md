@@ -107,7 +107,7 @@ that id. The private key lives at `extension/key.pem` and is **never committed**
 
 ```sh
 extension/build-crx.sh
-# build-crx: wrote dist/stream-frame-helper.crx (id cjgndomenjkjikknkabepmobpflkbchl, version 1.1.0)
+# build-crx: wrote dist/stream-frame-helper.crx (id cjgndomenjkjikknkabepmobpflkbchl, version 1.3.0)
 ```
 
 The script zips `extension/` (skipping the key and itself), signs it in the CRX3 format with
@@ -280,11 +280,19 @@ both:
 | Action | Gamepad | Keyboard mode |
 |---|---|---|
 | Play / pause | A | Space |
-| Seek back / forward | D-pad or left stick ← / → | ← / → |
-| Volume up / down | D-pad or left stick ↑ / ↓ | ↑ / ↓ |
+| Seek back / forward | D-pad ← / → | ← / → |
+| Volume up / down | D-pad ↑ / ↓ | ↑ / ↓ |
 | Mute | Y | M |
 | Fullscreen | X | F |
 | Home | Menu | Escape (hold) |
+| Scroll | Left stick | (mouse wheel, as usual) |
+
+The left stick scrolls whatever is under the pointer: a row or list that scrolls by itself, a
+dialog, or else the whole page, up and down as well as sideways. The further you push, the
+faster it goes. It works on every site and on the start page (where the D-pad moves between
+tiles), when the controller is in gamepad mode. The right stick stays free for SteamVR's laser
+pointer; if you turn the laser pointer off in the controller layout, you can scroll with the
+right stick instead (Configuration › Controls).
 
 Home asks *Return to Stream Frame home?*: press the same button again within 3 seconds, or click
 Yes; anything else cancels. Mapped keys are ignored while a text field has focus, so typing in a
@@ -300,7 +308,9 @@ The gear icon on the start page opens **Configuration**:
 - **Controls:** click **+ Assign** and press a controller button or key to map it (up to four per
   action; assigning a button moves it from any other action). The *Receiving* strip shows what
   the page receives and whether the controller is in gamepad or keyboard mode. Also: seek step
-  (5/10/30 s), volume step, Home confirmation on or off, reset to defaults.
+  (5/10/30 s), volume step, Home confirmation on or off, which stick scrolls (left, right or
+  off) and how fast, reset to defaults. If you assign a direction of the scrolling stick to an
+  action, that direction stops scrolling.
 - **Server:** the [send-from-phone](#send-a-link-from-your-phone) server: on or off, its port,
   and an optional confirmation code. The status line shows the address phones use.
 
@@ -476,12 +486,13 @@ that id to `--ext-id`, or the server refuses the connection. Stop the server wit
 `tests/e2e.mjs` drives the extension in **Chrome for Testing** over the DevTools protocol (branded
 Chrome 137+ ignores `--load-extension`). It checks the boot redirect, the start page and tiles,
 Configuration (tiles and controls), persistence, the keyboard mapper on a local video page,
-fullscreen, typing protection, the Home confirmation and button, and send-from-phone (the Server
-tab, port changes, the confirmation code, opening a link, and the prompt while a video plays): 61
-checks. It runs `lib/remote.py`, so it needs `python3` and the ports 8765, 8766, 8790 and 47800.
+fullscreen, typing protection, the Home confirmation and button, thumbstick scrolling (with
+simulated stick values), and send-from-phone (the Server tab, port changes, the confirmation code,
+opening a link, and the prompt while a video plays): 69 checks. It runs `lib/remote.py`, so it needs `python3` and the ports 8765, 8766, 8790 and 47800.
 Before running it, quit any other Chrome that has the extension loaded (such as your development
 profile) and stop any `lib/remote.py` you started by hand. Otherwise that copy of the extension
 connects to the test's server and receives the test's links, and the send-from-phone checks fail.
+The test refuses to start while any of its ports is already in use.
 
 ```sh
 npx @puppeteer/browsers install chrome@stable            # prints the Chrome for Testing path

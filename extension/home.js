@@ -514,6 +514,9 @@
     seek.value = controls.seekStep;
     vol.value = controls.volumeStep;
     $('#o-home').value = controls.homeConfirm ? 'confirm' : 'immediate';
+    $('#o-scroll').value = controls.scrollStick;
+    $('#o-scroll-speed').value = controls.scrollSpeed;
+    $('#o-scroll-speed').disabled = controls.scrollStick === 'off';
   }
 
   $('#o-seek').addEventListener('change', (e) => {
@@ -526,6 +529,15 @@
   });
   $('#o-home').addEventListener('change', (e) => {
     controls.homeConfirm = e.target.value === 'confirm';
+    SF.saveControls(controls);
+  });
+  $('#o-scroll').addEventListener('change', (e) => {
+    controls.scrollStick = e.target.value;
+    $('#o-scroll-speed').disabled = controls.scrollStick === 'off';
+    SF.saveControls(controls);
+  });
+  $('#o-scroll-speed').addEventListener('change', (e) => {
+    controls.scrollSpeed = e.target.value;
     SF.saveControls(controls);
   });
   $('#reset-controls').addEventListener('click', (e) =>
@@ -721,12 +733,19 @@
     true
   );
 
-  const NAV = {
-    'btn:12': 'up', 'axis:1:-': 'up',
-    'btn:13': 'down', 'axis:1:+': 'down',
-    'btn:14': 'left', 'axis:0:-': 'left',
-    'btn:15': 'right', 'axis:0:+': 'right',
-  };
+  // Focus moves with the D-pad, and with whichever stick does not scroll.
+  const DPAD_NAV = { 'btn:12': 'up', 'btn:13': 'down', 'btn:14': 'left', 'btn:15': 'right' };
+  const STICK_NAV = { left: ['axis:1:-', 'axis:1:+', 'axis:0:-', 'axis:0:+'], right: ['axis:3:-', 'axis:3:+', 'axis:2:-', 'axis:2:+'] };
+  function navDirection(binding) {
+    if (DPAD_NAV[binding]) return DPAD_NAV[binding];
+    for (const [stick, ids] of Object.entries(STICK_NAV)) {
+      const i = ids.indexOf(binding);
+      if (i >= 0 && stick !== controls.scrollStick) return ['up', 'down', 'left', 'right'][i];
+    }
+    return null;
+  }
+
+  const scroller = new SF.StickScroller();
 
   new SF.GamepadWatcher({
     onPress(binding, { repeat, pad }) {
@@ -735,8 +754,9 @@
         if (!repeat) finishCapture(binding);
         return;
       }
-      if (NAV[binding]) {
-        moveFocus(NAV[binding]);
+      const nav = navDirection(binding);
+      if (nav) {
+        moveFocus(nav);
       } else if (binding === 'btn:0' && !repeat) {
         const el = document.activeElement;
         if (el && el !== document.body) {
@@ -750,6 +770,9 @@
     },
     onRelease(binding) {
       liveUp(binding);
+    },
+    onFrame(pads) {
+      if (!capturing) scroller.frame(pads, controls.scrollStick, SF.SCROLL_SPEEDS[controls.scrollSpeed]);
     },
   });
 

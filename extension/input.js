@@ -1,6 +1,6 @@
 // Input plumbing shared by the start page and the content script: binding ids from
-// keyboard events, human-readable binding names, and a Gamepad API poller with edge
-// detection, stick thresholds and auto-repeat.
+// keyboard events, human-readable binding names, a Gamepad API poller with edge
+// detection, stick thresholds and auto-repeat, and thumbstick scrolling.
 (function (g) {
   'use strict';
   const SF = (g.StreamFrame = g.StreamFrame || {});
@@ -124,6 +124,92 @@
       } else if (now - s.since > REPEAT_DELAY && now - s.lastRepeat > REPEAT_RATE) {
         s.lastRepeat = now;
         this.onPress(binding, { repeat: true, pad });
+      }
+    }
+  };
+
+  // ---------- thumbstick scrolling ----------
+
+  const SCROLL_DEADZONE = 0.2;
+  const SCROLL_AXES = { left: { x: 0, y: 1 }, right: { x: 2, y: 3 } }; // standard mapping
+
+  // Where the user is looking: the last pointer position, else the focused element,
+  // else the middle of the viewport.
+  let lastPointer = null;
+  g.addEventListener('pointermove', (e) => (lastPointer = { x: e.clientX, y: e.clientY }), { capture: true, passive: true });
+
+  function deepElementAt(x, y) {
+    let el = document.elementFromPoint(x, y);
+    while (el && el.shadowRoot) {
+      const inner = el.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === el) break;
+      el = inner;
+    }
+    return el;
+  }
+
+  function startElement() {
+    if (lastPointer) {
+      const el = deepElementAt(lastPointer.x, lastPointer.y);
+      if (el) return el;
+    }
+    const f = document.activeElement;
+    if (f && f !== document.body) return f;
+    return deepElementAt(innerWidth / 2, innerHeight / 2);
+  }
+
+  function canScroll(el, axis, delta) {
+    const cs = getComputedStyle(el);
+    const overflow = axis === 'x' ? cs.overflowX : cs.overflowY;
+    if (!/(auto|scroll|overlay)/.test(overflow)) return false;
+    const [pos, size, view] =
+      axis === 'x' ? [el.scrollLeft, el.scrollWidth, el.clientWidth] : [el.scrollTop, el.scrollHeight, el.clientHeight];
+    return delta < 0 ? pos > 0 : pos + view < size - 1;
+  }
+
+  // The nearest ancestor that can still scroll that way (crossing shadow roots), else the page.
+  function scrollTarget(axis, delta) {
+    for (let el = startElement(); el; el = el.parentElement || (el.getRootNode && el.getRootNode().host) || null) {
+      if (el === document.body || el === document.documentElement) break;
+      if (canScroll(el, axis, delta)) return el;
+    }
+    return document.scrollingElement || document.documentElement;
+  }
+
+  // Deflection past the deadzone, rescaled to 0..1 and squared for fine control near the centre.
+  function stickValue(pads, axis) {
+    let v = 0;
+    for (const pad of pads) {
+      const a = pad.axes[axis] || 0;
+      if (Math.abs(a) > Math.abs(v)) v = a;
+    }
+    const m = (Math.abs(v) - SCROLL_DEADZONE) / (1 - SCROLL_DEADZONE);
+    return m <= 0 ? 0 : Math.sign(v) * m * m;
+  }
+
+  // Call from GamepadWatcher's onFrame. stick: 'left', 'right' or 'off'; speed: pixels per
+  // second at full deflection; skip(bindingId) returns true for directions mapped to an action.
+  SF.StickScroller = class {
+    constructor() {
+      this.last = 0;
+      this.carry = { x: 0, y: 0 };
+    }
+
+    frame(pads, stick, speed, skip = () => false) {
+      const now = performance.now();
+      const dt = this.last ? Math.min((now - this.last) / 1000, 0.1) : 0;
+      this.last = now;
+      const axes = SCROLL_AXES[stick];
+      if (!axes || !speed || !dt) return;
+      for (const axis of ['x', 'y']) {
+        const i = axes[axis];
+        let v = stickValue(pads, i);
+        if (v && skip(`axis:${i}:${v < 0 ? '-' : '+'}`)) v = 0;
+        this.carry[axis] += v * speed * dt;
+        const step = Math.trunc(this.carry[axis]);
+        if (!step) continue;
+        this.carry[axis] -= step;
+        scrollTarget(axis, step).scrollBy(axis === 'x' ? { left: step, behavior: 'instant' } : { top: step, behavior: 'instant' });
       }
     }
   };

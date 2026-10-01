@@ -351,6 +351,9 @@
   // ---------- gamepad ----------
 
   const padHoldTimers = new Map();
+  const scroller = new SF.StickScroller();
+  // Stick directions mapped to an action do not scroll.
+  const mapped = (binding) => pressMap.has(binding) || holdMap.has(binding);
 
   new SF.GamepadWatcher({
     onPress(binding, { repeat, pad }) {
@@ -379,6 +382,9 @@
       const key = pad.index + '|' + binding;
       clearTimeout(padHoldTimers.get(key));
       padHoldTimers.delete(key);
+    },
+    onFrame(pads) {
+      if (!confirmOpen()) scroller.frame(pads, controls.scrollStick, SF.SCROLL_SPEEDS[controls.scrollSpeed], mapped);
     },
   });
 

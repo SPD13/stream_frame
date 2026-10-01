@@ -26,10 +26,10 @@
   SF.DEFAULT_CONTROLS = {
     bindings: {
       playPause: ['btn:0', 'key:Space'],
-      seekBack: ['btn:14', 'axis:0:-', 'key:ArrowLeft'],
-      seekForward: ['btn:15', 'axis:0:+', 'key:ArrowRight'],
-      volumeUp: ['btn:12', 'axis:1:-', 'key:ArrowUp'],
-      volumeDown: ['btn:13', 'axis:1:+', 'key:ArrowDown'],
+      seekBack: ['btn:14', 'key:ArrowLeft'],
+      seekForward: ['btn:15', 'key:ArrowRight'],
+      volumeUp: ['btn:12', 'key:ArrowUp'],
+      volumeDown: ['btn:13', 'key:ArrowDown'],
       mute: ['btn:3', 'key:KeyM'],
       fullscreen: ['btn:2', 'key:KeyF'],
       home: ['btn:9', 'key:Escape:hold'],
@@ -37,10 +37,20 @@
     seekStep: 10, // seconds
     volumeStep: 10, // percent
     homeConfirm: true,
+    // Thumbstick scrolling: the left stick by default, so the right stick stays free for
+    // SteamVR's laser pointer.
+    scrollStick: 'left', // one of SF.SCROLL_STICKS
+    scrollSpeed: 'normal', // a key of SF.SCROLL_SPEEDS
+    version: 2,
   };
 
   SF.SEEK_STEPS = [5, 10, 30];
   SF.VOLUME_STEPS = [5, 10, 20];
+  SF.SCROLL_STICKS = ['off', 'left', 'right'];
+  // Scrolling speed: pixels per second at full deflection.
+  SF.SCROLL_SPEEDS = { slow: 700, normal: 1400, fast: 2800 };
+  // Version 1 also mapped the left stick to seek and volume; version 2 scrolls with it.
+  const V1_LEFT_STICK = { seekBack: 'axis:0:-', seekForward: 'axis:0:+', volumeUp: 'axis:1:-', volumeDown: 'axis:1:+' };
 
   // hidden: built-in tiles the user hid; shown: tiles marked hiddenByDefault in services.json
   // that the user chose to show.
@@ -66,6 +76,18 @@
     if (SF.SEEK_STEPS.includes(saved.seekStep)) out.seekStep = saved.seekStep;
     if (SF.VOLUME_STEPS.includes(saved.volumeStep)) out.volumeStep = saved.volumeStep;
     if (typeof saved.homeConfirm === 'boolean') out.homeConfirm = saved.homeConfirm;
+    if ((saved.version || 1) < 2) {
+      // Free the left stick from the old seek/volume defaults so it can scroll. Settings from
+      // 1.2.0 had right-stick scrolling as stickScroll: 'off' | speed.
+      for (const [action, binding] of Object.entries(V1_LEFT_STICK)) {
+        out.bindings[action] = out.bindings[action].filter((b) => b !== binding);
+      }
+      if (saved.stickScroll === 'off') out.scrollStick = 'off';
+      else if (Object.hasOwn(SF.SCROLL_SPEEDS, saved.stickScroll)) out.scrollSpeed = saved.stickScroll;
+    } else {
+      if (SF.SCROLL_STICKS.includes(saved.scrollStick)) out.scrollStick = saved.scrollStick;
+      if (Object.hasOwn(SF.SCROLL_SPEEDS, saved.scrollSpeed)) out.scrollSpeed = saved.scrollSpeed;
+    }
     return out;
   };
 

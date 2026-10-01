@@ -1,6 +1,6 @@
 // End-to-end test of the Stream Frame Helper extension in Chrome for Testing, over CDP.
 // Covers boot redirect, start page, Configuration (tiles + controls), persistence, the
-// keyboard mapper / Home overlay on a local player page, and send-from-phone (lib/remote.py
+// keyboard mapper / Home overlay on a local player page, thumbstick scrolling, and send-from-phone (lib/remote.py
 // with its Server tab). Gamepad input is not simulated. Needs python3 for lib/remote.py.
 // Uses ports 8765/8766 (phone page), 8790 (test site) and 47800 (remote.py control).
 // Close any other Chrome that has the extension loaded, and stop any lib/remote.py you started:
@@ -26,6 +26,17 @@ mkdirSync(OUT, { recursive: true });
 const PROFILE = mkdtempSync(join(tmpdir(), 'stream-frame-e2e-'));
 const SITE_PORT = 8790;
 const PHONE = 'http://127.0.0.1';
+// A Stream Frame server already running here would receive the test's settings and links
+// (and its extension would take over the test's server), so refuse to start.
+const busy = [];
+for (const port of [47800, 8765, 8766, SITE_PORT]) {
+  if (await fetch(`http://127.0.0.1:${port}/`).then(() => true, () => false)) busy.push(port);
+}
+if (busy.length) {
+  console.error(`Port(s) ${busy.join(', ')} already in use. Stop any lib/remote.py you started and quit any ` +
+    'other Chrome that has the Stream Frame extension loaded, then run the test again.');
+  process.exit(2);
+}
 const server = createServer((req, res) => {
   res.setHeader('content-type', 'text/html');
   res.end(readFileSync(join(HERE, 'site/player.html')));
@@ -185,6 +196,37 @@ try {
   check('reset controls restores defaults', c3.volumeUp.includes('key:ArrowUp') && !c3.playPause.includes('key:KeyP'));
   // re-add KeyP for later tests
   await click('tr[data-action="playPause"] .add'); await key('KeyP');
+
+  // thumbstick scrolling (fake stick input: Chrome for Testing cannot simulate a gamepad)
+  await click('#tab-tiles');
+  const panel = await ev(`(() => { const r = document.getElementById('panel-tiles').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: panel[0], y: panel[1] });
+  // axes: [left x, left y, right x, right y]
+  const stick = (axes, scrollStick = 'left') => ev(`(() => {
+    const p = document.getElementById('panel-tiles'); p.scrollTop = ${axes[1] + axes[3] > 0 ? 0 : 400}; const before = p.scrollTop;
+    const s = new StreamFrame.StickScroller(); const pads = [{ axes: ${JSON.stringify(axes)} }];
+    s.frame(pads, '${scrollStick}', 1400); const t = performance.now(); while (performance.now() - t < 60); s.frame(pads, '${scrollStick}', 1400);
+    return [before, p.scrollTop, p.scrollHeight > p.clientHeight]; })()`);
+  const [b0, a0, scrollable] = await stick([0, 1, 0, 0]);
+  check('left stick down scrolls the list under the pointer', scrollable && a0 - b0 > 40, `${b0} → ${a0}`);
+  const [b1, a1] = await stick([0, -1, 0, 0]);
+  check('left stick up scrolls back', b1 - a1 > 40, `${b1} → ${a1}`);
+  const [b2, a2] = await stick([0, 0.1, 0, 0]);
+  check('small stick movement (deadzone) does not scroll', a2 === b2);
+  const [b3, a3] = await stick([0, 0, 0, 1]);
+  check('right stick does not scroll by default (left for the laser pointer)', a3 === b3);
+  const [b4, a4] = await stick([0, 0, 0, 1], 'right');
+  check('right stick scrolls when chosen', a4 - b4 > 40, `${b4} → ${a4}`);
+  check('defaults: left stick scrolls, not mapped to seek/volume', await ev(`(() => { const c = StreamFrame.normalizeControls(null);
+    return c.scrollStick === 'left' && !Object.values(c.bindings).flat().some((b) => b.startsWith('axis:')); })()`));
+  check('1.2.0 settings: left-stick seek/volume freed, speed kept', await ev(`(() => {
+    const c = StreamFrame.normalizeControls({ bindings: { seekBack: ['btn:14', 'axis:0:-', 'key:ArrowLeft'], volumeUp: ['btn:12', 'axis:1:-'], mute: ['axis:1:-'] }, stickScroll: 'fast' });
+    return c.bindings.seekBack.join() === 'btn:14,key:ArrowLeft' && c.bindings.volumeUp.join() === 'btn:12'
+      && c.bindings.mute.join() === 'axis:1:-' && c.scrollStick === 'left' && c.scrollSpeed === 'fast' && c.version === 2; })()`));
+  await click('#tab-controls');
+  await ev(`(() => { for (const [id, v] of [['o-scroll', 'right'], ['o-scroll-speed', 'fast']]) { const s = document.getElementById(id); s.value = v; s.dispatchEvent(new Event('change')); } })()`);
+  const saved = await ev(`chrome.storage.local.get('controls').then(s => s.controls)`);
+  check('scrolling stick and speed saved', saved.scrollStick === 'right' && saved.scrollSpeed === 'fast', JSON.stringify([saved.scrollStick, saved.scrollSpeed]));
   await click('#config-close');
 
   // 4. layout persists across reload
