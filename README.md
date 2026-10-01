@@ -240,7 +240,7 @@ that id. The private key lives at `extension/key.pem` and is **never committed**
 
 ```sh
 extension/build-crx.sh
-# build-crx: wrote dist/stream-frame-helper.crx (id cjgndomenjkjikknkabepmobpflkbchl, version 1.4.0)
+# build-crx: wrote dist/stream-frame-helper.crx (id cjgndomenjkjikknkabepmobpflkbchl, version 1.6.0)
 ```
 
 The script zips `extension/` (skipping the key and itself), signs it in the CRX3 format with
@@ -314,7 +314,14 @@ if the extension changed (so Chrome on the Frame picks up the new package), and 
 
 The Frame's controllers reach a non-VR app through Steam Input, either as a gamepad or as
 keyboard/mouse, depending on the shortcut's controller layout. The helper extension listens to
-both:
+both.
+
+**Gamepad mode first.** When Stream Frame starts, SteamVR's dashboard is open around its panel
+and the controllers act as a laser mouse: you can point and click, but the buttons below do
+nothing yet. **Click a grip button** on either controller (or the *Enter Gamepad Mode* button
+under the panel) to switch to gamepad mode; click a grip again to get the laser mouse back.
+SteamVR offers no supported way for an app to start in gamepad mode, so this one click is needed
+after each launch.
 
 | Action | Gamepad | Keyboard mode |
 |---|---|---|

@@ -119,6 +119,37 @@
     $('#empty').hidden = visible.length > 0;
   }
 
+  // ---------- loading feedback ----------
+  // A streaming site can take several seconds to start loading on the Frame, and the start
+  // page stays on screen meanwhile: show that the click was taken.
+
+  const LOADING_SLOW_MS = 15000;
+  let loadingTimer = 0;
+
+  function showLoading(name) {
+    $('#loading-text').textContent = `Opening ${name}…`;
+    $('#loading-slow').textContent = '';
+    $('#loading').hidden = false;
+    clearTimeout(loadingTimer);
+    loadingTimer = setTimeout(() => {
+      $('#loading-slow').textContent = "Still loading. If nothing happens, check the headset's internet connection.";
+    }, LOADING_SLOW_MS);
+  }
+
+  function hideLoading() {
+    clearTimeout(loadingTimer);
+    $('#loading').hidden = true;
+  }
+
+  // Laser click, A on a focused tile, or Enter: all arrive as a click on the tile link.
+  grid.addEventListener('click', (e) => {
+    const tile = e.target.closest('a.tile');
+    if (!tile || e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    showLoading(tile.getAttribute('aria-label'));
+  });
+  // Coming back to the start page (Back, or restored from the back/forward cache).
+  window.addEventListener('pageshow', hideLoading);
+
   // ============================================================
   // Configuration dialog + tabs
   // ============================================================

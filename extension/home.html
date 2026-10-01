@@ -24,7 +24,14 @@
     <p id="empty" class="empty" hidden>All tiles are hidden. Open Configuration (gear icon) to show some.</p>
   </main>
 
-  <p class="hint">Point and click, or use the d-pad and A. The Home button on every page brings you back here.</p>
+  <div id="loading" class="loading" role="status" aria-live="polite" hidden>
+    <div class="spinner" aria-hidden="true"></div>
+    <p id="loading-text" class="loading-text"></p>
+    <p id="loading-slow" class="loading-slow"></p>
+  </div>
+
+  <p class="hint">Point and click, or use the d-pad and A. Controller buttons do nothing? <strong>Click a grip button</strong>
+    to switch the controllers from laser mouse to gamepad mode. The Home button on every page brings you back here.</p>
 
   <dialog id="config" aria-labelledby="config-title">
     <div class="config-head">

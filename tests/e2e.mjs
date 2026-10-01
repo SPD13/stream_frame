@@ -241,6 +241,18 @@ try {
   await key('ArrowRight');
   check('arrow key focuses a tile', await ev(`document.activeElement.classList.contains('tile')`));
 
+  // loading feedback: clicking a tile shows the overlay (navigation blocked to stay on the page)
+  const loading = await ev(`(() => {
+    addEventListener('click', (e) => e.preventDefault(), { once: true }); // runs after the grid's handler
+    const tile = [...document.querySelectorAll('#grid .tile')].find((a) => a.getAttribute('aria-label') === 'YouTube');
+    tile.click();
+    return [!document.getElementById('loading').hidden, document.getElementById('loading-text').textContent];
+  })()`);
+  check('clicking a tile shows the loading overlay', loading[0] && loading[1] === 'Opening YouTube…', JSON.stringify(loading));
+  await shot('04b-loading.png');
+  await ev(`dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))`);
+  check('loading overlay hidden when coming back', await ev(`document.getElementById('loading').hidden`));
+
   // 6. content script on a player page
   await navigate(`http://127.0.0.1:${SITE_PORT}/player.html`);
   check('test video ready', await waitFor('window.ready === true', 30000));
