@@ -8,11 +8,13 @@ Rewrite of frame/steam-shortcut.py from saphid/chromium-webxr-steam-frame
 
   steam-shortcut.py check
   steam-shortcut.py add --name NAME --exe PATH [--start-dir DIR] [--launch-options STR]
-                        [--icon PNG] [--state-file FILE]
+                        [--icon PNG] [--artwork-dir DIR] [--state-file FILE]
   steam-shortcut.py remove [--appid N | --state-file FILE] [--name NAME]
 
 Exit codes: 0 ok, 2 DevTools port unreachable, 1 other error.
 The state file stores the shortcut's app id so re-runs update instead of duplicating.
+--artwork-dir holds the library artwork (capsule.png, hero.png, logo.png, wide.png; see
+tools/make-library-art.py); remove clears it again.
 """
 import argparse
 import base64
@@ -179,6 +181,10 @@ ADD_JS = r"""
   call('SetShortcutStartDir', p.startDirQuoted);
   call('SetShortcutLaunchOptions', p.launchOptions);
   if (p.icon) call('SetShortcutIcon', p.icon);
+  for (const art of p.artwork || []) {
+    try { await A.SetCustomArtworkForApp(appId, art.data, 'png', art.type); }
+    catch (e) { warnings.push('artwork ' + art.name + ': ' + e); }
+  }
   return { appId, created, warnings };
 })(__PARAMS__)
 """
@@ -190,10 +196,30 @@ REMOVE_JS = r"""
   if (!ids.length && p.name) {
     try { ids = (appStore.allApps || []).filter(a => a.app_type === 1073741824 && a.display_name === p.name).map(a => a.appid); } catch (e) {}
   }
-  for (const id of ids) SteamClient.Apps.RemoveShortcut(id);
+  for (const id of ids) {
+    for (const type of [0, 1, 2, 3]) {
+      try { await SteamClient.Apps.ClearCustomArtworkForApp(id, type); } catch (e) {}
+    }
+    SteamClient.Apps.RemoveShortcut(id);
+  }
   return { removed: ids };
 })(__PARAMS__)
 """
+
+
+# Steam's custom artwork types (SteamClient.Apps.SetCustomArtworkForApp).
+ARTWORK = {"capsule.png": 0, "hero.png": 1, "logo.png": 2, "wide.png": 3}
+
+
+def load_artwork(folder):
+    if not folder:
+        return []
+    folder = Path(folder).expanduser()
+    return [
+        {"name": name, "type": t, "data": base64.b64encode((folder / name).read_bytes()).decode()}
+        for name, t in ARTWORK.items()
+        if (folder / name).is_file()
+    ]
 
 
 def run_js(template, params):
@@ -220,13 +246,15 @@ def cmd_add(a):
         "startDirQuoted": f'"{start_dir}"',
         "launchOptions": a.launch_options or "",
         "icon": a.icon,
+        "artwork": load_artwork(a.artwork_dir),
     })
     if a.state_file:
         Path(a.state_file).parent.mkdir(parents=True, exist_ok=True)
         Path(a.state_file).write_text(f"{res['appId']}\n")
     for w in res.get("warnings", []):
         print(f"steam-shortcut: warning: {w}", file=sys.stderr)
-    print(f"steam-shortcut: {'added' if res['created'] else 'updated'} '{a.name}' (app id {res['appId']})")
+    art = f", library artwork set from {a.artwork_dir}" if a.artwork_dir else ""
+    print(f"steam-shortcut: {'added' if res['created'] else 'updated'} '{a.name}' (app id {res['appId']}){art}")
 
 
 def cmd_remove(a):
@@ -252,6 +280,7 @@ def main():
     pa.add_argument("--start-dir")
     pa.add_argument("--launch-options", default="")
     pa.add_argument("--icon")
+    pa.add_argument("--artwork-dir")
     pa.add_argument("--state-file")
     pr = sub.add_parser("remove")
     pr.add_argument("--appid", type=int)

@@ -14,3 +14,4 @@ file or setting to change if the result differs.
 | [S5](S5.md) | Does SteamVR remember the panel's dock state? | not run |
 | [S6](S6.md) | What controller events reach the page? Can a layout be shipped? | not run |
 | [S7](S7.md) | Can a phone reach the headset and send a link? Does the link channel stay up? | not run |
+| [S8](S8.md) | Can a Steam build (tested as a Devkit Game) set Stream Frame up and run Chrome outside the Steam Linux Runtime container? | in progress |

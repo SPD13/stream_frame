@@ -14,14 +14,15 @@ Browsing a catalogue with a laser pointer is slow, so you can also
 [send a link from your phone](#send-a-link-from-your-phone): tap **Share** in a streaming app,
 paste the link into a page the headset serves on your Wi-Fi, and the title opens on the headset.
 
-> **Status:** the code is complete and tested on a Mac, but has **not yet been run on a Steam
-> Frame**. The on-device checks in [`docs/spikes/`](docs/spikes/README.md) verify the assumptions
-> it rests on (extension provisioning, panel mapping, controller events, resolution). Expect
-> adjustments after the first on-device run.
+> **Status:** early. Stream Frame installs and runs on a Steam Frame (start page, helper
+> extension, controller scrolling, send-from-phone), but the on-device checks in
+> [`docs/spikes/`](docs/spikes/README.md) are not finished: picture quality per service, Theater
+> and passthrough, controller mapping and closing behaviour still need to be confirmed. Expect
+> rough edges.
 
 **Contents:** [Picture quality](#picture-quality-read-this-first) ·
-[Requirements](#requirements) · [Build](#build) · [Install on the Steam Frame](#install-on-the-steam-frame) ·
-[Update and uninstall](#update-and-uninstall) · [Use](#use) ·
+[Requirements](#requirements) · [Install](#install) · [Update and uninstall](#update-and-uninstall) ·
+[Build on another computer](#build-on-another-computer-developers) · [Use](#use) ·
 [Send a link from your phone](#send-a-link-from-your-phone) · [Troubleshooting](#troubleshooting) ·
 [Develop and test on a computer](#develop-and-test-on-a-computer) · [How it works](#how-it-works)
 
@@ -54,14 +55,151 @@ plug in the charger for a film.
 
 ## Requirements
 
-**Steam Frame** (SteamOS 0.3.0 or later):
-
-- Developer Mode enabled, for SSH access.
+- A **Steam Frame** with SteamOS 0.3.0 or later and **Developer Mode** turned on.
 - Internet access (the installer downloads Google Chrome from Google, or Flathub as a fallback).
 - About 1 GB free in `/home` for Chrome and the profile. Nothing is written to the read-only `/`.
 
-**Build machine** (macOS or Linux), from which you build the helper extension and copy the
-project to the Frame:
+No other computer is needed: everything below runs on the Frame. If you prefer typing on a
+computer, you can do the same steps over SSH.
+
+## Install
+
+### 1. Turn on Developer Mode and open a terminal
+
+1. In the headset: **Settings → System → Developer Mode**, turn it on.
+2. Open a terminal on the Frame, either way:
+   - **On the Frame:** switch to desktop mode and open **Konsole**.
+   - **From a computer, over SSH:** in Konsole on the Frame, set a password for the `steamos`
+     user (SSH needs one) and start the SSH server, kept on across reboots:
+
+     ```sh
+     passwd
+     sudo systemctl enable --now sshd
+     ```
+
+     Find the headset's IP address in **Settings → Internet →** your network, then from the
+     computer: `ssh steamos@<frame-ip>`.
+
+Menu names on the Frame may differ slightly; the goal is a terminal as the `steamos` user.
+
+### 2. Download Stream Frame
+
+`git` is already installed on SteamOS:
+
+```sh
+git clone https://github.com/SPD13/stream_frame.git ~/stream_frame
+cd ~/stream_frame
+```
+
+### 3. Run the installer
+
+```sh
+./install.sh --dry-run     # optional: shows every step without changing anything
+./install.sh
+```
+
+It takes a minute or two (it downloads Chrome, about 130 MB). No sudo is needed. The installer:
+
+1. **Installs Google Chrome**: Google's arm64 `.deb`, extracted into
+   `~/.local/share/stream-frame/chrome` (no package manager, no root). If that download fails, it
+   installs the Flathub Flatpak (`com.google.Chrome`, as a `--user` install) instead. The `.deb`
+   comes first because only it lets the installer install the extensions: Chrome on Linux
+   installs extensions registered in its own program folder, which is read-only in the Flatpak,
+   and ignores the profile's `External Extensions` folder (confirmed on the Frame). An existing
+   Flatpak Chrome is left in place and no longer used.
+2. **Builds the helper extension package** (`dist/stream-frame-helper.crx`). Chrome only
+   installs signed packages, so the first run creates a signing key for your Frame in
+   `~/.config/stream-frame/helper-key.pem` and every later run signs with it. Keep that file:
+   with a new key, the extension gets a new id (your tiles and button mappings live with the
+   old one). If you copied a ready-made package from a build machine, that one is used instead.
+3. **Copies Stream Frame** to `~/.local/share/stream-frame` (launcher, libraries, extension, boot
+   page, icon, and the extension package into `dist/`).
+4. **Seeds a dedicated Chrome profile** at `~/.local/share/stream-frame/profile`: no first-run
+   screens, password saving off, bookmarks for the services. It registers two extensions in
+   Chrome's `extensions` folder, which Chrome installs silently on first launch: the Stream Frame
+   Helper (from the local `.crx`) and *New Netflix 1080p* (from the Chrome Web Store).
+5. **Creates the settings file** `~/.config/stream-frame/config.env` if there is none.
+6. **Adds a desktop entry** (`~/.local/share/applications/stream-frame.desktop`).
+7. **Adds the Stream Frame shortcut to the Steam library** through the Steam client's local
+   DevTools port, without restarting Steam, with its icon and library artwork: the portrait and
+   wide capsules, the banner at the top of its page, and the logo drawn over it
+   (`assets/library/`).
+
+Installer options:
+
+| Option | Effect |
+|---|---|
+| `--backend=deb` / `--backend=flatpak` | force a Chrome backend (default: `.deb`, Flatpak as fallback). With the Flatpak, load the helper extension by hand: `chrome://extensions` → *Developer mode* → *Load unpacked* → `~/.local/share/stream-frame/extension` |
+| `--update-chrome` | download the latest Chrome even if one is installed (the `.deb` Chrome does not update itself) |
+| `--no-shortcut` | do not add the Steam library shortcut |
+| `--no-netflix-1080p` | do not register the *New Netflix 1080p* extension |
+| `--enable-cef-debugging` | if Steam's DevTools port is closed, enable it (then restart Steam and re-run) |
+| `--dry-run` | print what would be done; runs on any machine |
+| `--force` | skip the aarch64 architecture check |
+
+**If the library shortcut could not be added**, the installer says so. Either re-run with
+`--enable-cef-debugging`, restart Steam and run `./install.sh` again, or add it by hand: desktop
+mode → Steam → **Games → Add a Non-Steam Game to My Library → Browse** →
+`~/.local/share/stream-frame/bin/stream-frame`, then rename the entry "Stream Frame". For the
+artwork, right-click it → **Manage → Set custom artwork** for each picture, using the files in
+`~/.local/share/stream-frame/assets/library/` (`capsule.png` for the portrait, `wide.png`,
+`hero.png` for the background, `logo.png`).
+
+### 4. First launch
+
+1. In the headset, open **Stream Frame** from the Steam library. Chrome opens full screen on the
+   start page, as its own SteamVR panel.
+2. Open the SteamVR dashboard on that panel and choose **View in Theater** or **Float in World**;
+   curvature and size are there too.
+3. Choose passthrough (colour with the Arcturus camera) or the dark home space in SteamVR
+   settings.
+4. Pick a service and log in with the SteamVR keyboard. Logins persist across relaunches and
+   reboots.
+
+## Update and uninstall
+
+**Update** to the latest version: close Stream Frame (with *Stop* in the Steam library), then in a
+terminal on the Frame:
+
+```sh
+cd ~/stream_frame
+git pull
+./install.sh
+```
+
+Logins, tiles, button mappings and the Server settings are kept. Chrome picks up the new helper
+extension on the next launch. Chrome itself is not updated by a plain re-run: add
+`--update-chrome` to download the latest version (do this every few weeks for security fixes):
+
+```sh
+./install.sh --update-chrome
+```
+
+**Uninstall** (on the Frame):
+
+```sh
+~/.local/share/stream-frame/uninstall.sh                  # keeps the profile (logins, tiles, mapping)
+~/.local/share/stream-frame/uninstall.sh --purge          # deletes everything, including logins
+~/.local/share/stream-frame/uninstall.sh --remove-chrome  # also removes the Chrome Flatpak
+```
+
+`--dry-run` shows what would be removed.
+
+The clone in `~/stream_frame` can be deleted after uninstalling (`rm -rf ~/stream_frame`). To
+remove everything, also delete the extension signing key: `--purge` removes
+`~/.config/stream-frame`, which holds it.
+
+## Build on another computer (developers)
+
+For working on Stream Frame: edit and build on a computer, then copy the result to the Frame.
+To simply install it, follow [Install](#install) instead.
+
+Stream Frame has no compile step. The only build artefact is the **helper extension package**,
+`dist/stream-frame-helper.crx`, which the installer registers with Chrome on the Frame. On the
+Frame, `install.sh` builds it by itself with a key of its own; on a build machine you sign it with
+the project key, so the extension id stays the same everywhere.
+
+**Build machine** (macOS or Linux):
 
 | Tool | Needed for |
 |---|---|
@@ -71,11 +209,6 @@ project to the Frame:
 | Pillow (`pip install pillow`) | *optional:* re-rendering the service tiles |
 | Node.js 22+ | *optional:* the automated end-to-end test |
 | ShellCheck | *optional:* linting the shell scripts |
-
-## Build
-
-Stream Frame has no compile step. The only build artefact is the **helper extension package**,
-`dist/stream-frame-helper.crx`, which the installer registers with Chrome on the Frame.
 
 ### 1. Get the source
 
@@ -107,7 +240,7 @@ that id. The private key lives at `extension/key.pem` and is **never committed**
 
 ```sh
 extension/build-crx.sh
-# build-crx: wrote dist/stream-frame-helper.crx (id cjgndomenjkjikknkabepmobpflkbchl, version 1.3.0)
+# build-crx: wrote dist/stream-frame-helper.crx (id cjgndomenjkjikknkabepmobpflkbchl, version 1.4.0)
 ```
 
 The script zips `extension/` (skipping the key and itself), signs it in the CRX3 format with
@@ -128,8 +261,20 @@ python3 tools/make-tiles.py          # writes extension/logos/<service>.png (960
 ```
 
 Per-service background colour, fit mode and scale are listed at the top of
-`tools/make-tiles.py`. The app icon (`assets/icon.png`, `extension/icons/icon128.png`) is drawn by
-`python3 tools/make-icon.py` (stdlib only).
+`tools/make-tiles.py`.
+
+The app icon and the Steam library artwork are rendered from the app logo,
+`assets/raw_icons/app_logo.jpeg`:
+
+```sh
+python3 tools/make-library-art.py    # needs Pillow 10.3+
+```
+
+It cuts the headset emblem, the wordmark and the tagline out of the logo, and writes the
+portrait capsule (600×900), wide capsule (920×430), banner (3840×1240, no text) and transparent
+logo into `assets/library/`, plus `assets/icon.png` (256×256) and `extension/icons/icon128.png`.
+If the icon changed, bump the extension version. Re-run `./install.sh` on the Frame to update
+the library artwork.
 
 ### 5. Optional: verify before deploying
 
@@ -140,125 +285,19 @@ shellcheck -x install.sh uninstall.sh bin/stream-frame lib/*.sh tools/*.sh exten
 
 For the automated browser test, see [Develop and test on a computer](#develop-and-test-on-a-computer).
 
-## Install on the Steam Frame
+### 6. Copy the project to the Frame and install
 
-### 1. Enable SSH on the Frame
-
-1. In the headset: **Settings → System → Developer Mode**, turn it on.
-2. Switch to desktop mode, open **Konsole**, and set a password for the `steamos` user (SSH
-   needs one):
-
-   ```sh
-   passwd
-   ```
-
-3. If SSH is not already running, start it and keep it enabled across reboots:
-
-   ```sh
-   sudo systemctl enable --now sshd
-   ```
-
-4. Note the headset's IP address: **Settings → Internet →** your network. Below it is written
-   `<frame-ip>`.
-
-Check from the build machine that you can log in:
-
-```sh
-ssh steamos@<frame-ip>
-```
-
-Menu names on the Frame may differ slightly from the above; the goal is simply SSH access as
-the `steamos` user.
-
-### 2. Copy the project to the Frame
-
-From the repository folder on the build machine, after [building](#build) the extension package:
+With SSH set up on the Frame ([step 1 of Install](#1-turn-on-developer-mode-and-open-a-terminal)):
 
 ```sh
 rsync -av --exclude '.git' --exclude 'extension/key.pem' --exclude 'tests/out' --exclude '.DS_Store' \
   ./ steamos@<frame-ip>:stream_frame/
+ssh steamos@<frame-ip> 'cd stream_frame && ./install.sh'
 ```
 
-This copies `dist/stream-frame-helper.crx` along with the sources. The private signing key stays
-on the build machine.
-
-> Cloning with `git` directly on the Frame also works, but `dist/` is not in the repository:
-> copy the package over separately with
-> `scp dist/stream-frame-helper.crx steamos@<frame-ip>:stream_frame/dist/`.
-
-### 3. Run the installer
-
-```sh
-ssh steamos@<frame-ip>
-cd stream_frame
-./install.sh --dry-run     # optional: shows every step without changing anything
-./install.sh
-```
-
-No sudo is needed. The installer:
-
-1. **Installs Google Chrome**: Google's arm64 `.deb`, extracted into
-   `~/.local/share/stream-frame/chrome` (no package manager, no root). If that download fails, it
-   installs the Flathub Flatpak (`com.google.Chrome`, as a `--user` install) instead. The `.deb`
-   comes first because only it lets the installer install the extensions: Chrome on Linux
-   installs extensions registered in its own program folder, which is read-only in the Flatpak,
-   and ignores the profile's `External Extensions` folder (confirmed on the Frame). An existing
-   Flatpak Chrome is left in place and no longer used.
-2. **Copies Stream Frame** to `~/.local/share/stream-frame` (launcher, libraries, extension, boot
-   page, icon, and the extension package into `dist/`).
-3. **Seeds a dedicated Chrome profile** at `~/.local/share/stream-frame/profile`: no first-run
-   screens, password saving off, bookmarks for the services. It registers two extensions in
-   Chrome's `extensions` folder, which Chrome installs silently on first launch: the Stream Frame
-   Helper (from the local `.crx`) and *New Netflix 1080p* (from the Chrome Web Store).
-4. **Creates the settings file** `~/.config/stream-frame/config.env` if there is none.
-5. **Adds a desktop entry** (`~/.local/share/applications/stream-frame.desktop`).
-6. **Adds the Stream Frame shortcut to the Steam library** through the Steam client's local
-   DevTools port, without restarting Steam.
-
-Installer options:
-
-| Option | Effect |
-|---|---|
-| `--backend=deb` / `--backend=flatpak` | force a Chrome backend (default: `.deb`, Flatpak as fallback). With the Flatpak, load the helper extension by hand: `chrome://extensions` → *Developer mode* → *Load unpacked* → `~/.local/share/stream-frame/extension` |
-| `--update-chrome` | download the latest Chrome even if one is installed (the `.deb` Chrome does not update itself) |
-| `--no-shortcut` | do not add the Steam library shortcut |
-| `--no-netflix-1080p` | do not register the *New Netflix 1080p* extension |
-| `--enable-cef-debugging` | if Steam's DevTools port is closed, enable it (then restart Steam and re-run) |
-| `--dry-run` | print what would be done; runs on any machine |
-| `--force` | skip the aarch64 architecture check |
-
-**If the library shortcut could not be added**, the installer says so. Either re-run with
-`--enable-cef-debugging`, restart Steam and run `./install.sh` again, or add it by hand: desktop
-mode → Steam → **Games → Add a Non-Steam Game to My Library → Browse** →
-`~/.local/share/stream-frame/bin/stream-frame`, then rename the entry "Stream Frame".
-
-### 4. First launch
-
-1. In the headset, open **Stream Frame** from the Steam library. Chrome opens full screen on the
-   start page, as its own SteamVR panel.
-2. Open the SteamVR dashboard on that panel and choose **View in Theater** or **Float in World**;
-   curvature and size are there too.
-3. Choose passthrough (colour with the Arcturus camera) or the dark home space in SteamVR
-   settings.
-4. Pick a service and log in with the SteamVR keyboard. Logins persist across relaunches and
-   reboots.
-
-## Update and uninstall
-
-**Update:** close Stream Frame, bump `"version"` in `extension/manifest.json` if the extension
-changed, then repeat [copy](#2-copy-the-project-to-the-frame) and `./install.sh`. Logins, tiles
-and button mappings are kept. Chrome itself is not updated by a plain re-run: add `--update-chrome` to
-download the latest version (do this every few weeks for security fixes).
-
-**Uninstall** (on the Frame):
-
-```sh
-~/.local/share/stream-frame/uninstall.sh                  # keeps the profile (logins, tiles, mapping)
-~/.local/share/stream-frame/uninstall.sh --purge          # deletes everything, including logins
-~/.local/share/stream-frame/uninstall.sh --remove-chrome  # also removes the Chrome Flatpak
-```
-
-`--dry-run` shows what would be removed.
+This copies `dist/stream-frame-helper.crx` along with the sources; the private signing key stays
+on the build machine. To update, close Stream Frame, bump `"version"` in `extension/manifest.json`
+if the extension changed (so Chrome on the Frame picks up the new package), and repeat.
 
 ## Use
 
@@ -541,7 +580,7 @@ Steam library shortcut "Stream Frame"
 | `extension/build-crx.sh` | packs and signs the `.crx` |
 | `web/boot.html` | first page; redirects to the start page or explains how to fix a missing helper |
 | `assets/raw_icons/`, `tools/make-tiles.py` | source icons and the tile renderer |
-| `tools/make-icon.py` | app icon renderer |
+| `assets/raw_icons/app_logo.jpeg`, `tools/make-library-art.py`, `assets/library/` | app logo, and the icon and Steam library artwork rendered from it |
 | `tools/frame-shot.sh` | headset-view screenshot over SSH (OpenVR IVRScreenshots) |
 | `tests/` | end-to-end test and its local player page; unit tests for `lib/remote.py` |
 | `input/` | placeholder for a default Steam Input layout (pending spike S6) |

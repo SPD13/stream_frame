@@ -4,6 +4,9 @@
   seed-profile.py id MANIFEST
       Print the extension id derived from manifest.json's "key".
 
+  seed-profile.py crx-id FILE
+      Print the extension id a signed CRX3 package installs as.
+
   seed-profile.py seed --profile DIR --seed-dir DIR --services FILE --home-url URL
                        [--ext-dir DIR] [--helper-crx PATH --helper-version V --helper-id ID]
                        [--no-netflix-1080p]
@@ -26,6 +29,40 @@ def extension_id(manifest_path):
     key = json.loads(Path(manifest_path).read_text())["key"]
     digest = hashlib.sha256(base64.b64decode(key)).hexdigest()[:32]
     return "".join(chr(ord("a") + int(c, 16)) for c in digest)
+
+
+def _fields(buf):
+    """(field number, bytes) for the length-delimited fields of a protobuf message."""
+    i = 0
+    while i < len(buf):
+        tag, i = _varint(buf, i)
+        if tag & 7 != 2:
+            raise ValueError("unexpected protobuf wire type")
+        n, i = _varint(buf, i)
+        yield tag >> 3, buf[i:i + n]
+        i += n
+
+
+def _varint(buf, i):
+    shift = value = 0
+    while True:
+        b = buf[i]
+        i += 1
+        value |= (b & 0x7F) << shift
+        shift += 7
+        if not b & 0x80:
+            return value, i
+
+
+def crx_id(path):
+    """The id in a CRX3 file's signed header (CrxFileHeader.signed_header_data.crx_id)."""
+    data = Path(path).read_bytes()
+    if data[:4] != b"Cr24" or int.from_bytes(data[4:8], "little") != 3:
+        raise ValueError(f"{path} is not a CRX3 package")
+    header = data[12:12 + int.from_bytes(data[8:12], "little")]
+    signed = next(v for f, v in _fields(header) if f == 10000)
+    raw = next(v for f, v in _fields(signed) if f == 1)
+    return "".join(chr(ord("a") + int(c, 16)) for c in raw.hex())
 
 
 def chrome_time():
@@ -111,6 +148,19 @@ def seed(args):
     elif nf.exists():
         nf.unlink()
     if args.helper_crx:
+        # A helper signed with another key (project key vs this device's key) has another id:
+        # drop its registration so Chrome does not run two copies.
+        crx_path = str(Path(args.helper_crx).resolve())
+        for old in ext_dir.glob("*.json"):
+            if old.stem in (args.helper_id, NETFLIX_1080P_ID):
+                continue
+            try:
+                stale = json.loads(old.read_text()).get("external_crx") == crx_path
+            except (OSError, ValueError):
+                stale = False
+            if stale:
+                old.unlink()
+                notes.append(f"removed the old helper registration {old.stem}")
         write_json(
             ext_dir / f"{args.helper_id}.json",
             {"external_crx": str(Path(args.helper_crx).resolve()), "external_version": args.helper_version},
@@ -127,6 +177,8 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     pid = sub.add_parser("id")
     pid.add_argument("manifest")
+    pcrx = sub.add_parser("crx-id")
+    pcrx.add_argument("crx")
     ps = sub.add_parser("seed")
     ps.add_argument("--profile", required=True)
     ps.add_argument("--seed-dir", required=True)
@@ -140,6 +192,8 @@ def main():
     args = p.parse_args()
     if args.cmd == "id":
         print(extension_id(args.manifest))
+    elif args.cmd == "crx-id":
+        print(crx_id(args.crx))
     else:
         if args.helper_crx and not (args.helper_version and args.helper_id):
             p.error("--helper-crx needs --helper-version and --helper-id")

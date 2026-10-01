@@ -88,20 +88,36 @@ if [[ $current == flatpak ]]; then
 fi
 
 # ------------------------------------------------------------------ helper extension
+# The signed package, in order of preference:
+#   1. built with the project key (extension/key.pem, the maintainer's machine),
+#   2. built with this device's own key (~/.config/stream-frame/helper-key.pem), so an
+#      install from a plain git clone keeps working after every "git pull",
+#   3. a ready-made dist/stream-frame-helper.crx copied over from a build machine,
+#   4. otherwise: create this device's key now and build with it.
 step "Stream Frame Helper extension"
 crx=$src/dist/stream-frame-helper.crx
+device_key=$SF_CONFIG_DIR/helper-key.pem
 if [[ -f $src/extension/key.pem ]]; then
+  note "signing with the project key"
   run "$src/extension/build-crx.sh" "$crx"
-fi
-if [[ -f $crx ]] || (( dry_run )); then
-  note "package: $crx"
+elif [[ -f $device_key ]] || [[ ! -f $crx ]]; then
+  if [[ -f $device_key ]]; then
+    note "signing with this device's key ($device_key)"
+  else
+    note "no signed package: creating a signing key for this device ($device_key)"
+  fi
+  run env STREAM_FRAME_KEY="$device_key" "$src/extension/build-crx.sh" --own-key "$crx" \
+    || die "could not build the helper extension package (needs openssl and python3)"
 else
-  warn "no dist/stream-frame-helper.crx and no signing key to build one."
-  warn "Build it on your dev machine (extension/build-crx.sh) and copy dist/ along, or load"
-  warn "$SF_DATA/extension unpacked from chrome://extensions (Developer mode)."
-  crx=
+  note "using the package copied from the build machine"
 fi
-ext_id=$(python3 "$src/lib/seed-profile.py" id "$src/extension/manifest.json")
+if [[ -f $crx ]]; then
+  note "package: $crx"
+  ext_id=$(python3 "$src/lib/seed-profile.py" crx-id "$crx")
+else
+  # dry run on a machine without a package: the id the project key would give
+  ext_id=$(python3 "$src/lib/seed-profile.py" id "$src/extension/manifest.json")
+fi
 ext_version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$src/extension/manifest.json")
 note "extension id $ext_id, version $ext_version"
 
@@ -188,7 +204,8 @@ if (( shortcut )); then
   step "Steam library shortcut"
   rc=0
   run python3 "$SF_DATA/lib/steam-shortcut.py" add --name "$SHORTCUT_NAME" --exe "$SF_DATA/bin/stream-frame" \
-    --start-dir "$SF_DATA" --icon "$SF_DATA/assets/icon.png" --state-file "$SF_STATE/shortcut-appid" || rc=$?
+    --start-dir "$SF_DATA" --icon "$SF_DATA/assets/icon.png" --artwork-dir "$SF_DATA/assets/library" \
+    --state-file "$SF_STATE/shortcut-appid" || rc=$?
   if (( rc == 2 )); then
     cef_flag=$HOME/.steam/steam/.cef-enable-remote-debugging
     if (( enable_cef )); then

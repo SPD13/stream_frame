@@ -2,11 +2,14 @@
 # Packs extension/ into a CRX3 file signed with the project key, so the extension id
 # stays cjgndomenjkjikknkabepmobpflkbchl (derived from "key" in manifest.json).
 #
-#   extension/build-crx.sh [output.crx]        default: dist/stream-frame-helper.crx
+#   extension/build-crx.sh [--new-key | --own-key] [output.crx]   default: dist/stream-frame-helper.crx
 #
 # The private key is extension/key.pem (or $STREAM_FRAME_KEY) and must never be
 # committed. With --new-key and no key present, a new key is generated and
-# manifest.json's "key" is rewritten, which changes the extension id.
+# manifest.json's "key" is rewritten, which changes the extension id (for forks).
+# With --own-key, any key is used (generated if missing) and only the packed copy of
+# manifest.json gets its "key"; the source stays untouched. install.sh uses this to
+# sign on the user's device when the project key is not available.
 # Needs python3 and openssl; no Chrome required.
 set -euo pipefail
 
@@ -14,12 +17,14 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(dirname "$here")
 key=${STREAM_FRAME_KEY:-$here/key.pem}
 new_key=0
+own_key=0
 out=$root/dist/stream-frame-helper.crx
 
 for arg in "$@"; do
   case $arg in
     --new-key) new_key=1 ;;
-    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    --own-key) own_key=1 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) out=$arg ;;
   esac
 done
@@ -27,7 +32,11 @@ done
 command -v openssl >/dev/null || { echo "build-crx: openssl is required" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "build-crx: python3 is required" >&2; exit 1; }
 
-if [[ ! -f $key ]]; then
+if [[ ! -f $key ]] && (( own_key )); then
+  echo "build-crx: generating a signing key at $key"
+  mkdir -p "$(dirname "$key")"
+  (umask 077 && openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$key" 2>/dev/null)
+elif [[ ! -f $key ]]; then
   if (( ! new_key )); then
     echo "build-crx: private key $key not found." >&2
     echo "  Copy the project key there, or pass --new-key to create one (this changes the extension id)." >&2
@@ -51,11 +60,12 @@ trap 'rm -rf "$tmp"' EXIT
 
 openssl pkey -in "$key" -pubout -outform DER > "$tmp/pub.der"
 
-# 1. zip the extension (deterministic order and timestamps)
-python3 - "$here" "$tmp/ext.zip" <<'PY'
-import sys, zipfile
+# 1. zip the extension (deterministic order and timestamps). With --own-key the packed
+#    manifest.json carries this key, so the extension id matches the signature.
+python3 - "$here" "$tmp/ext.zip" "$tmp/pub.der" "$own_key" <<'PY'
+import base64, json, sys, zipfile
 from pathlib import Path
-src, dst = Path(sys.argv[1]), sys.argv[2]
+src, dst, pub, own_key = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3]), sys.argv[4] == "1"
 skip = {"build-crx.sh", "key.pem"}
 with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
     for p in sorted(src.rglob("*")):
@@ -65,17 +75,22 @@ with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
         info = zipfile.ZipInfo(str(rel), date_time=(2026, 1, 1, 0, 0, 0))
         info.compress_type = zipfile.ZIP_DEFLATED
         info.external_attr = 0o644 << 16
-        z.writestr(info, p.read_bytes())
+        data = p.read_bytes()
+        if own_key and str(rel) == "manifest.json":
+            m = json.loads(data)
+            m["key"] = base64.b64encode(pub.read_bytes()).decode()
+            data = (json.dumps(m, indent=2) + "\n").encode()
+        z.writestr(info, data)
 PY
 
 # 2. signed header data + the bytes to sign
-python3 - "$tmp" "$here/manifest.json" <<'PY'
+python3 - "$tmp" "$here/manifest.json" "$own_key" <<'PY'
 import base64, hashlib, json, struct, sys
 from pathlib import Path
 tmp = Path(sys.argv[1])
 pub = (tmp / "pub.der").read_bytes()
 manifest_key = json.load(open(sys.argv[2])).get("key", "")
-if base64.b64decode(manifest_key) != pub:
+if sys.argv[3] != "1" and base64.b64decode(manifest_key) != pub:
     sys.exit("build-crx: manifest.json \"key\" does not match the private key; the extension id would change")
 
 def varint(n):
