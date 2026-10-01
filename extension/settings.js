@@ -37,16 +37,16 @@
     seekStep: 10, // seconds
     volumeStep: 10, // percent
     homeConfirm: true,
-    // Thumbstick scrolling: the left stick by default, so the right stick stays free for
-    // SteamVR's laser pointer.
-    scrollStick: 'left', // one of SF.SCROLL_STICKS
+    // Thumbstick scrolling: by default the left stick in every direction and the right stick
+    // up/down (in gamepad mode; with SteamVR's laser mouse on, the right stick points).
+    scrollStick: 'both', // one of SF.SCROLL_STICKS
     scrollSpeed: 'normal', // a key of SF.SCROLL_SPEEDS
-    version: 2,
+    version: 3,
   };
 
   SF.SEEK_STEPS = [5, 10, 30];
   SF.VOLUME_STEPS = [5, 10, 20];
-  SF.SCROLL_STICKS = ['off', 'left', 'right'];
+  SF.SCROLL_STICKS = ['both', 'left', 'right', 'off'];
   // Scrolling speed: pixels per second at full deflection.
   SF.SCROLL_SPEEDS = { slow: 700, normal: 1400, fast: 2800 };
   // Version 1 also mapped the left stick to seek and volume; version 2 scrolls with it.
@@ -87,6 +87,8 @@
     } else {
       if (SF.SCROLL_STICKS.includes(saved.scrollStick)) out.scrollStick = saved.scrollStick;
       if (Object.hasOwn(SF.SCROLL_SPEEDS, saved.scrollSpeed)) out.scrollSpeed = saved.scrollSpeed;
+      // Version 2's default was 'left'; version 3 adds the right stick (up/down) by default.
+      if (saved.version === 2 && saved.scrollStick === 'left') out.scrollStick = 'both';
     }
     return out;
   };

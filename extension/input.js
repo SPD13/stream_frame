@@ -131,7 +131,13 @@
   // ---------- thumbstick scrolling ----------
 
   const SCROLL_DEADZONE = 0.2;
-  const SCROLL_AXES = { left: { x: 0, y: 1 }, right: { x: 2, y: 3 } }; // standard mapping
+  // Axes (standard mapping) that scroll sideways (x) and up/down (y), per scrolling choice.
+  // both: the left stick in every direction, the right stick up/down only.
+  const SCROLL_AXES = {
+    both: { x: [0], y: [1, 3] },
+    left: { x: [0], y: [1] },
+    right: { x: [2], y: [3] },
+  };
 
   // Where the user is looking: the last pointer position, else the focused element,
   // else the middle of the viewport.
@@ -177,18 +183,22 @@
   }
 
   // Deflection past the deadzone, rescaled to 0..1 and squared for fine control near the centre.
-  function stickValue(pads, axis) {
+  // The strongest deflection on these axes (over all pads, skipping directions mapped to an
+  // action), past the deadzone, rescaled to 0..1 and squared for fine control near the centre.
+  function stickValue(pads, axes, skip) {
     let v = 0;
     for (const pad of pads) {
-      const a = pad.axes[axis] || 0;
-      if (Math.abs(a) > Math.abs(v)) v = a;
+      for (const i of axes) {
+        const a = pad.axes[i] || 0;
+        if (Math.abs(a) > Math.abs(v) && !skip(`axis:${i}:${a < 0 ? '-' : '+'}`)) v = a;
+      }
     }
     const m = (Math.abs(v) - SCROLL_DEADZONE) / (1 - SCROLL_DEADZONE);
     return m <= 0 ? 0 : Math.sign(v) * m * m;
   }
 
-  // Call from GamepadWatcher's onFrame. stick: 'left', 'right' or 'off'; speed: pixels per
-  // second at full deflection; skip(bindingId) returns true for directions mapped to an action.
+  // Call from GamepadWatcher's onFrame. stick: 'both', 'left', 'right' or 'off'; speed: pixels
+  // per second at full deflection; skip(bindingId) returns true for directions mapped to an action.
   SF.StickScroller = class {
     constructor() {
       this.last = 0;
@@ -202,9 +212,7 @@
       const axes = SCROLL_AXES[stick];
       if (!axes || !speed || !dt) return;
       for (const axis of ['x', 'y']) {
-        const i = axes[axis];
-        let v = stickValue(pads, i);
-        if (v && skip(`axis:${i}:${v < 0 ? '-' : '+'}`)) v = 0;
+        const v = stickValue(pads, axes[axis], skip);
         this.carry[axis] += v * speed * dt;
         const step = Math.trunc(this.carry[axis]);
         if (!step) continue;

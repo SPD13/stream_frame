@@ -202,7 +202,7 @@ try {
   const panel = await ev(`(() => { const r = document.getElementById('panel-tiles').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: panel[0], y: panel[1] });
   // axes: [left x, left y, right x, right y]
-  const stick = (axes, scrollStick = 'left') => ev(`(() => {
+  const stick = (axes, scrollStick = 'both') => ev(`(() => {
     const p = document.getElementById('panel-tiles'); p.scrollTop = ${axes[1] + axes[3] > 0 ? 0 : 400}; const before = p.scrollTop;
     const s = new StreamFrame.StickScroller(); const pads = [{ axes: ${JSON.stringify(axes)} }];
     s.frame(pads, '${scrollStick}', 1400); const t = performance.now(); while (performance.now() - t < 60); s.frame(pads, '${scrollStick}', 1400);
@@ -214,15 +214,15 @@ try {
   const [b2, a2] = await stick([0, 0.1, 0, 0]);
   check('small stick movement (deadzone) does not scroll', a2 === b2);
   const [b3, a3] = await stick([0, 0, 0, 1]);
-  check('right stick does not scroll by default (left for the laser pointer)', a3 === b3);
-  const [b4, a4] = await stick([0, 0, 0, 1], 'right');
-  check('right stick scrolls when chosen', a4 - b4 > 40, `${b4} → ${a4}`);
-  check('defaults: left stick scrolls, not mapped to seek/volume', await ev(`(() => { const c = StreamFrame.normalizeControls(null);
-    return c.scrollStick === 'left' && !Object.values(c.bindings).flat().some((b) => b.startsWith('axis:')); })()`));
+  check('right stick scrolls up/down by default too', a3 - b3 > 40, `${b3} → ${a3}`);
+  const [b4, a4] = await stick([0, 0, 0, 1], 'left');
+  check('right stick ignored when only the left stick scrolls', a4 === b4);
+  check('defaults: both sticks scroll, none mapped to seek/volume', await ev(`(() => { const c = StreamFrame.normalizeControls(null);
+    return c.scrollStick === 'both' && !Object.values(c.bindings).flat().some((b) => b.startsWith('axis:')); })()`));
   check('1.2.0 settings: left-stick seek/volume freed, speed kept', await ev(`(() => {
     const c = StreamFrame.normalizeControls({ bindings: { seekBack: ['btn:14', 'axis:0:-', 'key:ArrowLeft'], volumeUp: ['btn:12', 'axis:1:-'], mute: ['axis:1:-'] }, stickScroll: 'fast' });
     return c.bindings.seekBack.join() === 'btn:14,key:ArrowLeft' && c.bindings.volumeUp.join() === 'btn:12'
-      && c.bindings.mute.join() === 'axis:1:-' && c.scrollStick === 'left' && c.scrollSpeed === 'fast' && c.version === 2; })()`));
+      && c.bindings.mute.join() === 'axis:1:-' && c.scrollStick === 'both' && c.scrollSpeed === 'fast' && c.version === 3; })()`));
   await click('#tab-controls');
   await ev(`(() => { for (const [id, v] of [['o-scroll', 'right'], ['o-scroll-speed', 'fast']]) { const s = document.getElementById(id); s.value = v; s.dispatchEvent(new Event('change')); } })()`);
   const saved = await ev(`chrome.storage.local.get('controls').then(s => s.controls)`);

@@ -240,7 +240,7 @@ that id. The private key lives at `extension/key.pem` and is **never committed**
 
 ```sh
 extension/build-crx.sh
-# build-crx: wrote dist/stream-frame-helper.crx (id cjgndomenjkjikknkabepmobpflkbchl, version 1.6.0)
+# build-crx: wrote dist/stream-frame-helper.crx (id cjgndomenjkjikknkabepmobpflkbchl, version 1.7.0)
 ```
 
 The script zips `extension/` (skipping the key and itself), signs it in the CRX3 format with
@@ -331,14 +331,14 @@ after each launch.
 | Mute | Y | M |
 | Fullscreen | X | F |
 | Home | Menu | Escape (hold) |
-| Scroll | Left stick | (mouse wheel, as usual) |
+| Scroll | Left stick (any direction), right stick (up/down) | (mouse wheel, as usual) |
 
-The left stick scrolls whatever is under the pointer: a row or list that scrolls by itself, a
-dialog, or else the whole page, up and down as well as sideways. The further you push, the
-faster it goes. It works on every site and on the start page (where the D-pad moves between
-tiles), when the controller is in gamepad mode. The right stick stays free for SteamVR's laser
-pointer; if you turn the laser pointer off in the controller layout, you can scroll with the
-right stick instead (Configuration › Controls).
+The sticks scroll whatever is under the pointer: a row or list that scrolls by itself, a dialog,
+or else the whole page. The left stick scrolls up and down as well as sideways, the right stick
+up and down; the further you push, the faster it goes. It works on every site and on the start
+page (where the D-pad moves between tiles), when the controllers are in gamepad mode.
+Configuration › Controls can limit scrolling to one stick (the right stick then also scrolls
+sideways) or turn it off.
 
 Home asks *Return to Stream Frame home?*: press the same button again within 3 seconds, or click
 Yes; anything else cancels. Mapped keys are ignored while a text field has focus, so typing in a
@@ -354,8 +354,8 @@ The gear icon on the start page opens **Configuration**:
 - **Controls:** click **+ Assign** and press a controller button or key to map it (up to four per
   action; assigning a button moves it from any other action). The *Receiving* strip shows what
   the page receives and whether the controller is in gamepad or keyboard mode. Also: seek step
-  (5/10/30 s), volume step, Home confirmation on or off, which stick scrolls (left, right or
-  off) and how fast, reset to defaults. If you assign a direction of the scrolling stick to an
+  (5/10/30 s), volume step, Home confirmation on or off, which sticks scroll (both, left, right
+  or off) and how fast, reset to defaults. If you assign a direction of a scrolling stick to an
   action, that direction stops scrolling.
 - **Server:** the [send-from-phone](#send-a-link-from-your-phone) server: on or off, its port,
   and an optional confirmation code. The status line shows the address phones use.

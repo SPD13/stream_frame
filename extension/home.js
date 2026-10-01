@@ -764,14 +764,15 @@
     true
   );
 
-  // Focus moves with the D-pad, and with whichever stick does not scroll.
+  // Focus moves with the D-pad, and with a stick that does not scroll.
   const DPAD_NAV = { 'btn:12': 'up', 'btn:13': 'down', 'btn:14': 'left', 'btn:15': 'right' };
   const STICK_NAV = { left: ['axis:1:-', 'axis:1:+', 'axis:0:-', 'axis:0:+'], right: ['axis:3:-', 'axis:3:+', 'axis:2:-', 'axis:2:+'] };
   function navDirection(binding) {
     if (DPAD_NAV[binding]) return DPAD_NAV[binding];
     for (const [stick, ids] of Object.entries(STICK_NAV)) {
       const i = ids.indexOf(binding);
-      if (i >= 0 && stick !== controls.scrollStick) return ['up', 'down', 'left', 'right'][i];
+      const scrolls = controls.scrollStick === 'both' || controls.scrollStick === stick;
+      if (i >= 0 && !scrolls) return ['up', 'down', 'left', 'right'][i];
     }
     return null;
   }
