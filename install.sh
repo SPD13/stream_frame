@@ -138,6 +138,9 @@ if [[ $src != "$(cd "$SF_DATA" 2>/dev/null && pwd || echo "$SF_DATA")" ]]; then
   for f in install.sh uninstall.sh README.md; do
     [[ -f $src/$f ]] && run cp "$src/$f" "$SF_DATA/$f"
   done
+  # The release version (tools/make-release.sh), which the installer app compares with the latest
+  # release; a git clone has none, so an older one must not stay behind
+  if [[ -f $src/VERSION ]]; then run cp "$src/VERSION" "$SF_DATA/VERSION"; else run rm -f "$SF_DATA/VERSION"; fi
   [[ -n $crx ]] && run cp "$crx" "$SF_DATA/dist/stream-frame-helper.crx"
 else
   note "running from the install directory; files are already in place"

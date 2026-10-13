@@ -59,12 +59,48 @@ plug in the charger for a film.
 - Internet access (the installer downloads Google Chrome from Google, or Flathub as a fallback).
 - About 1 GB free in `/home` for Chrome and the profile. Nothing is written to the read-only `/`.
 
-No other computer is needed: everything below runs on the Frame. If you prefer typing on a
-computer, you can do the same steps over SSH.
+The easiest way is the [installer app](#with-the-installer-app), run on a Windows, macOS or Linux
+computer on the same network as the Frame. Without a computer, the same install runs
+[from a terminal on the Frame](#from-a-terminal-on-the-frame).
 
 ## Install
 
-### 1. Turn on Developer Mode and open a terminal
+### With the installer app
+
+The installer app finds the Frame on your network, checks that it is ready, then downloads the
+latest release from GitHub and installs or updates Stream Frame on it with one button. Nothing is
+installed on the computer, no terminal is needed, and the password is asked once.
+
+1. **On the Frame:** **Settings → System → Enable Developer Mode**, then in the **Developer**
+   section that appears, choose **Set User Password** and pick a password. Keep the headset on
+   while installing: it leaves the network when it sleeps.
+2. **On the computer,** download the installer for your system from the
+   [latest release](https://github.com/SPD13/stream_frame/releases/latest):
+
+   | System | File | Then |
+   |---|---|---|
+   | Windows 10/11 | `Stream-Frame-Installer-Windows.exe` | Double-click it. If Windows warns *Windows protected your PC*, choose **More info → Run anyway**. |
+   | macOS 12 or later | `Stream-Frame-Installer-macOS.zip` | Open the `.zip`, then open **Stream Frame Installer**. If macOS says it cannot check the app, open **System Settings → Privacy & Security** and choose **Open Anyway**. Allow it to find devices on the local network when asked. |
+   | Linux, SteamOS desktop | `Stream-Frame-Installer-Linux-x86_64.tar.gz` (or `-arm64`) | Unpack it and run `./Stream-Frame-Installer`. It opens in your browser. |
+
+   The apps are not signed, hence the warnings on first launch.
+3. **Step 1 of the app, Connect:** it lists the Frames it found. Type the password from step 1 and
+   select **Connect**. It checks that the Frame is on the network, that Developer Mode is on, that
+   it can sign in, and that Steam is running with enough free space. Each failed check says what
+   to do. If the Frame is not listed, type its IP address (shown in **Settings → Network** on the
+   Frame).
+4. **Step 2, Install:** select **Install**. The app sends Stream Frame to the Frame, where its
+   `install.sh` does the [steps below](#3-run-the-installer): Google Chrome, the helper extension,
+   the profile and the Steam library entry, with its artwork. Then go to
+   [First launch](#4-first-launch).
+
+If Steam's DevTools port is closed, the app turns it on and asks you to restart the headset, then
+to select **Reinstall** to add the library entry. The app keeps a log for troubleshooting; its
+path is shown when something goes wrong.
+
+### From a terminal on the Frame
+
+#### 1. Turn on Developer Mode and open a terminal
 
 1. In the headset: **Settings → System → Developer Mode**, turn it on.
 2. Open a terminal on the Frame, either way:
@@ -82,7 +118,7 @@ computer, you can do the same steps over SSH.
 
 Menu names on the Frame may differ slightly; the goal is a terminal as the `steamos` user.
 
-### 2. Download Stream Frame
+#### 2. Download Stream Frame
 
 `git` is already installed on SteamOS:
 
@@ -91,7 +127,7 @@ git clone https://github.com/SPD13/stream_frame.git ~/stream_frame
 cd ~/stream_frame
 ```
 
-### 3. Run the installer
+#### 3. Run the installer
 
 ```sh
 ./install.sh --dry-run     # optional: shows every step without changing anything
@@ -145,7 +181,7 @@ artwork, right-click it → **Manage → Set custom artwork** for each picture, 
 `~/.local/share/stream-frame/assets/library/` (`capsule.png` for the portrait, `wide.png`,
 `hero.png` for the background, `logo.png`).
 
-### 4. First launch
+#### 4. First launch
 
 1. In the headset, open **Stream Frame** from the Steam library. Chrome opens full screen on the
    start page, as its own SteamVR panel.
@@ -158,8 +194,15 @@ artwork, right-click it → **Manage → Set custom artwork** for each picture, 
 
 ## Update and uninstall
 
-**Update** to the latest version: close Stream Frame (with *Stop* in the Steam library), then in a
-terminal on the Frame:
+**With the installer app:** close Stream Frame (with *Stop* in the Steam library) and open the app
+again. After **Connect**, it shows the installed and the latest version: select **Update**. Leave
+**Also download the latest Google Chrome** ticked to update Chrome too (it does not update
+itself). **Uninstall Stream Frame from the Frame...**, at the bottom, removes it; tick the box to
+also delete the logins, tiles and button mappings. The app installs the same way as the terminal
+steps below, so you can switch between the two.
+
+**From a terminal:** close Stream Frame (with *Stop* in the Steam library), then in a terminal on
+the Frame:
 
 ```sh
 cd ~/stream_frame
@@ -298,6 +341,30 @@ ssh steamos@<frame-ip> 'cd stream_frame && ./install.sh'
 This copies `dist/stream-frame-helper.crx` along with the sources; the private signing key stays
 on the build machine. To update, close Stream Frame, bump `"version"` in `extension/manifest.json`
 if the extension changed (so Chrome on the Frame picks up the new package), and repeat.
+
+### 7. Publish a release for the installer app
+
+The [installer app](#with-the-installer-app) (`installer/`, in Go) downloads the
+`stream-frame-<version>.tar.gz` of the latest GitHub release, streams it over its own SSH
+connection into `~/.cache/stream-frame-install` on the Frame and runs the `install.sh` inside it.
+The release is built on a Mac with the project key in place:
+
+```sh
+tools/make-release.sh          # dist/release/stream-frame-<date>-<commit>.tar.gz
+tools/make-installer.sh        # dist/release/installer/Stream-Frame-Installer-{Windows.exe,macOS.zip,Linux-*.tar.gz}
+gh release create <version> dist/release/stream-frame-<version>.tar.gz dist/release/installer/*
+```
+
+`make-release.sh` packs the files git tracks that `install.sh` needs, the helper extension signed
+with the project key, and a `VERSION` file (installed to `~/.local/share/stream-frame/VERSION`,
+which the app compares with the latest release). `make-installer.sh` needs Go (`brew install go`)
+and Xcode's command line tools. The installer apps download whatever release is latest, so they
+only need rebuilding when `installer/` changes; their file names stay the same, so
+`https://github.com/SPD13/stream_frame/releases/latest/download/<name>` always works. The
+repository must be public for the app to see its releases.
+
+To try a release without publishing it: `cd installer && go run . --archive ../dist/release/stream-frame-<version>.tar.gz`
+(add `--browser` to open it in the browser instead of a window).
 
 ## Use
 
